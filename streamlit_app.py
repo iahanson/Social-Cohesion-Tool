@@ -131,7 +131,7 @@ def dashboard_overview():
         int_data = st.session_state.intervention_tool.run_full_analysis()
     
     # Key metrics
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         st.metric(
@@ -141,20 +141,28 @@ def dashboard_overview():
         )
     
     with col2:
+        avg_risk = ew_data['data']['risk_score'].mean()
+        st.metric(
+            label="Average Risk Score",
+            value=f"{avg_risk:.3f}",
+            delta=f"{'High' if avg_risk > 0.6 else 'Medium' if avg_risk > 0.3 else 'Low'} Risk"
+        )
+    
+    with col3:
         st.metric(
             label="Average Trust Score",
             value=f"{sm_data['summary']['average_trust_score']:.1f}/10",
             delta=f"{sm_data['summary']['trust_range']['min']:.1f}-{sm_data['summary']['trust_range']['max']:.1f}"
         )
     
-    with col3:
+    with col4:
         st.metric(
             label="Intervention Cases",
             value=int_data['summary']['total_cases_in_database'],
             delta=f"{int_data['summary']['intervention_types_available']} types"
         )
     
-    with col4:
+    with col5:
         st.metric(
             label="Active Alerts",
             value=ew_data['summary']['total_alerts'],
@@ -191,6 +199,68 @@ def dashboard_overview():
             title="Social Trust vs Deprivation by Local Authority"
         )
         st.plotly_chart(fig, use_container_width=True)
+    
+    # Risk Assessment Summary
+    st.subheader("🚨 Risk Assessment Summary")
+    
+    # Quick action buttons
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("🔄 Refresh Risk Assessment", help="Re-run risk assessment with latest data"):
+            st.rerun()
+    with col2:
+        if st.button("📊 View Detailed Analysis", help="Go to detailed risk assessment page"):
+            st.session_state.page = "🚨 Early Warning System"
+            st.rerun()
+    with col3:
+        if st.button("📈 Export Risk Data", help="Download risk assessment data"):
+            # Create downloadable CSV
+            csv_data = ew_data['data'][['msoa_code', 'local_authority', 'risk_score', 'risk_level', 
+                                       'unemployment_rate', 'crime_rate', 'social_trust_score', 
+                                       'community_cohesion']].to_csv(index=False)
+            st.download_button(
+                label="Download Risk Assessment Data",
+                data=csv_data,
+                file_name=f"risk_assessment_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+    
+    # Risk score distribution
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Risk Score Distribution")
+        fig = px.histogram(
+            ew_data['data'],
+            x='risk_score',
+            nbins=20,
+            title="Risk Score Distribution Across All Areas",
+            labels={'risk_score': 'Risk Score', 'count': 'Number of Areas'},
+            color_discrete_sequence=['#1f77b4']
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        st.subheader("Top Risk Areas")
+        top_risk_areas = ew_data['data'].nlargest(5, 'risk_score')[
+            ['msoa_code', 'local_authority', 'risk_score', 'risk_level']
+        ]
+        
+        # Display as a styled table
+        for idx, row in top_risk_areas.iterrows():
+            risk_color = {
+                'Low': '#4caf50',
+                'Medium': '#ff9800', 
+                'High': '#ff5722',
+                'Critical': '#f44336'
+            }.get(row['risk_level'], '#666666')
+            
+            st.markdown(f"""
+            <div class="metric-card" style="border-left-color: {risk_color}; margin-bottom: 0.5rem;">
+                <strong>{row['msoa_code']}</strong> - {row['local_authority']}<br>
+                Risk Score: {row['risk_score']:.3f} | Level: {row['risk_level']}
+            </div>
+            """, unsafe_allow_html=True)
     
     # Recent alerts
     st.subheader("🚨 Recent Alerts")
@@ -255,6 +325,109 @@ def early_warning_page():
                 for alert in results['alerts']:
                     st.warning(f"**{alert['type']}** - {alert['message']}")
             
+            elif analysis_type == "Risk Assessment":
+                # Run risk assessment analysis
+                data = st.session_state.early_warning_system.load_data(n_areas)
+                data_with_risk = st.session_state.early_warning_system.calculate_risk_score(data)
+                
+                st.subheader("Risk Assessment Results")
+                
+                # Summary metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Areas Analyzed", len(data_with_risk))
+                with col2:
+                    st.metric("Average Risk Score", f"{data_with_risk['risk_score'].mean():.3f}")
+                with col3:
+                    st.metric("High Risk Areas", len(data_with_risk[data_with_risk['risk_level'].isin(['High', 'Critical'])]))
+                
+                # Risk distribution chart
+                st.subheader("Risk Level Distribution")
+                risk_dist = data_with_risk['risk_level'].value_counts()
+                fig = px.pie(
+                    values=risk_dist.values,
+                    names=risk_dist.index,
+                    color_discrete_map={
+                        'Low': '#4caf50',
+                        'Medium': '#ff9800', 
+                        'High': '#ff5722',
+                        'Critical': '#f44336'
+                    },
+                    title="Distribution of Risk Levels"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Risk score distribution
+                st.subheader("Risk Score Distribution")
+                fig = px.histogram(
+                    data_with_risk,
+                    x='risk_score',
+                    nbins=20,
+                    title="Risk Score Distribution",
+                    labels={'risk_score': 'Risk Score', 'count': 'Number of Areas'}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Top risk areas table
+                st.subheader("Top Risk Areas")
+                top_risk = data_with_risk.nlargest(10, 'risk_score')[['msoa_code', 'local_authority', 'risk_score', 'risk_level']]
+                st.dataframe(top_risk, use_container_width=True)
+                
+                # Risk factors correlation
+                st.subheader("Risk Factor Correlations")
+                risk_factors = ['unemployment_rate', 'crime_rate', 'social_trust_score', 
+                               'community_cohesion', 'economic_uncertainty', 'housing_stress']
+                corr_data = data_with_risk[risk_factors + ['risk_score']].corr()
+                
+                fig = px.imshow(
+                    corr_data,
+                    text_auto=True,
+                    aspect="auto",
+                    title="Correlation Matrix: Risk Factors vs Risk Score",
+                    color_continuous_scale='RdBu_r'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            elif analysis_type == "Anomaly Detection":
+                # Run anomaly detection analysis
+                data = st.session_state.early_warning_system.load_data(n_areas)
+                data_with_risk = st.session_state.early_warning_system.calculate_risk_score(data)
+                data_with_anomalies = st.session_state.early_warning_system.detect_anomalies(data_with_risk)
+                
+                st.subheader("Anomaly Detection Results")
+                
+                # Summary metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Areas", len(data_with_anomalies))
+                with col2:
+                    st.metric("Anomalies Detected", len(data_with_anomalies[data_with_anomalies['is_anomaly'] == True]))
+                with col3:
+                    st.metric("Anomaly Rate", f"{len(data_with_anomalies[data_with_anomalies['is_anomaly'] == True]) / len(data_with_anomalies) * 100:.1f}%")
+                
+                # Anomaly score distribution
+                st.subheader("Anomaly Score Distribution")
+                fig = px.histogram(
+                    data_with_anomalies,
+                    x='anomaly_score',
+                    color='is_anomaly',
+                    nbins=20,
+                    title="Anomaly Score Distribution",
+                    labels={'anomaly_score': 'Anomaly Score', 'count': 'Number of Areas'}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Anomalous areas table
+                st.subheader("Anomalous Areas")
+                anomalous_areas = data_with_anomalies[data_with_anomalies['is_anomaly'] == True][
+                    ['msoa_code', 'local_authority', 'anomaly_score', 'risk_score', 'risk_level']
+                ].sort_values('anomaly_score', ascending=True)
+                
+                if len(anomalous_areas) > 0:
+                    st.dataframe(anomalous_areas, use_container_width=True)
+                else:
+                    st.info("No anomalous areas detected")
+            
             elif analysis_type == "Area Profile":
                 results = st.session_state.early_warning_system.run_full_analysis()
                 area_data = results['data']
@@ -276,6 +449,8 @@ def early_warning_page():
                     st.write("**Recommendations:**")
                     for rec in profile['recommendations']:
                         st.write(f"- {rec}")
+                else:
+                    st.error(f"Error: {profile['error']}")
 
 def sentiment_mapping_page():
     """Sentiment mapping page"""
@@ -287,7 +462,7 @@ def sentiment_mapping_page():
     with col1:
         map_type = st.selectbox(
             "Map Type:",
-            ["Trust Map", "Cohesion Map", "Sentiment Map", "Correlation Analysis"]
+            ["Trust Map", "Cohesion Map", "Sentiment Map", "Correlation Analysis", "Cohesion Dashboard"]
         )
     
     with col2:
@@ -347,6 +522,198 @@ def sentiment_mapping_page():
                     st.metric("Highest Trust", f"{trust_data.max():.1f}/10")
                 with col3:
                     st.metric("Lowest Trust", f"{trust_data.min():.1f}/10")
+            
+            elif map_type == "Cohesion Map":
+                st.subheader("Community Cohesion Map")
+                
+                try:
+                    # Create cohesion map using Plotly scatter_mapbox
+                    cohesion_fig = px.scatter_mapbox(
+                        results['data'],
+                        lat='latitude',
+                        lon='longitude',
+                        color='community_cohesion_composite',
+                        size='population',
+                        hover_data=['msoa_name', 'msoa_code', 'local_authority'],
+                        color_continuous_scale='RdYlGn',
+                        mapbox_style='carto-positron',
+                        title='Community Cohesion Map',
+                        zoom=10,
+                        center=dict(lat=51.5074, lon=-0.1278)
+                    )
+                    
+                    cohesion_fig.update_layout(
+                        height=500,
+                        margin=dict(r=0, t=30, l=0, b=0)
+                    )
+                    
+                    st.plotly_chart(cohesion_fig, use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"Error displaying cohesion map: {e}")
+                    st.info("Displaying alternative visualization...")
+                    # Fallback to scatter plot
+                    st.plotly_chart(px.scatter(
+                        results['data'],
+                        x='longitude',
+                        y='latitude',
+                        color='community_cohesion_composite',
+                        size='population',
+                        hover_data=['msoa_name', 'msoa_code', 'local_authority'],
+                        title="Community Cohesion Map (Alternative View)",
+                        color_continuous_scale='RdYlGn'
+                    ), use_container_width=True)
+                
+                # Cohesion statistics
+                st.subheader("Cohesion Statistics")
+                cohesion_data = results['data']['community_cohesion_composite']
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Average Cohesion", f"{cohesion_data.mean():.1f}/10")
+                with col2:
+                    st.metric("Highest Cohesion", f"{cohesion_data.max():.1f}/10")
+                with col3:
+                    st.metric("Lowest Cohesion", f"{cohesion_data.min():.1f}/10")
+                
+                # Cohesion components breakdown
+                st.subheader("Cohesion Components")
+                cohesion_components = results['data'][[
+                    'community_belonging', 'volunteer_participation', 
+                    'community_events_attendance', 'local_friendships'
+                ]].mean()
+                
+                fig = px.bar(
+                    x=cohesion_components.index,
+                    y=cohesion_components.values,
+                    title="Average Cohesion Component Scores",
+                    labels={'x': 'Component', 'y': 'Score (1-10)'}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            elif map_type == "Sentiment Map":
+                st.subheader("Sentiment Map")
+                
+                try:
+                    # Create sentiment map using Plotly scatter_mapbox
+                    sentiment_fig = px.scatter_mapbox(
+                        results['data'],
+                        lat='latitude',
+                        lon='longitude',
+                        color='sentiment_composite',
+                        size='population',
+                        hover_data=['msoa_name', 'msoa_code', 'local_authority'],
+                        color_continuous_scale='RdYlGn',
+                        mapbox_style='carto-positron',
+                        title='Sentiment Map',
+                        zoom=10,
+                        center=dict(lat=51.5074, lon=-0.1278)
+                    )
+                    
+                    sentiment_fig.update_layout(
+                        height=500,
+                        margin=dict(r=0, t=30, l=0, b=0)
+                    )
+                    
+                    st.plotly_chart(sentiment_fig, use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"Error displaying sentiment map: {e}")
+                    st.info("Displaying alternative visualization...")
+                    # Fallback to scatter plot
+                    st.plotly_chart(px.scatter(
+                        results['data'],
+                        x='longitude',
+                        y='latitude',
+                        color='sentiment_composite',
+                        size='population',
+                        hover_data=['msoa_name', 'msoa_code', 'local_authority'],
+                        title="Sentiment Map (Alternative View)",
+                        color_continuous_scale='RdYlGn'
+                    ), use_container_width=True)
+                
+                # Sentiment statistics
+                st.subheader("Sentiment Statistics")
+                sentiment_data = results['data']['sentiment_composite']
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Average Sentiment", f"{sentiment_data.mean():.1f}/10")
+                with col2:
+                    st.metric("Highest Sentiment", f"{sentiment_data.max():.1f}/10")
+                with col3:
+                    st.metric("Lowest Sentiment", f"{sentiment_data.min():.1f}/10")
+                
+                # Sentiment components breakdown
+                st.subheader("Sentiment Components")
+                sentiment_components = results['data'][[
+                    'overall_satisfaction', 'economic_optimism', 'future_outlook'
+                ]].mean()
+                
+                fig = px.bar(
+                    x=sentiment_components.index,
+                    y=sentiment_components.values,
+                    title="Average Sentiment Component Scores",
+                    labels={'x': 'Component', 'y': 'Score (1-10)'}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            elif map_type == "Cohesion Dashboard":
+                st.subheader("Cohesion Dashboard")
+                
+                # Display the cohesion dashboard visualization
+                cohesion_dashboard_fig = results['visualizations']['cohesion_dashboard']
+                st.plotly_chart(cohesion_dashboard_fig, use_container_width=True)
+                
+                # Additional cohesion insights
+                st.subheader("Cohesion Insights")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("Top Cohesion Areas")
+                    top_cohesion = results['data'].nlargest(5, 'community_cohesion_composite')[
+                        ['msoa_name', 'msoa_code', 'local_authority', 'community_cohesion_composite']
+                    ]
+                    
+                    for idx, row in top_cohesion.iterrows():
+                        st.markdown(f"""
+                        <div class="metric-card" style="border-left-color: #4caf50; margin-bottom: 0.5rem;">
+                            <strong>{row['msoa_name']}</strong> - {row['local_authority']}<br>
+                            Cohesion Score: {row['community_cohesion_composite']:.1f}/10
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                with col2:
+                    st.subheader("Cohesion vs Trust Relationship")
+                    fig = px.scatter(
+                        results['data'],
+                        x='social_trust_composite',
+                        y='community_cohesion_composite',
+                        color='local_authority',
+                        size='population',
+                        hover_data=['msoa_name', 'msoa_code'],
+                        title="Community Cohesion vs Social Trust",
+                        labels={
+                            'social_trust_composite': 'Social Trust Score',
+                            'community_cohesion_composite': 'Community Cohesion Score'
+                        }
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Overall cohesion metrics
+                st.subheader("Overall Cohesion Metrics")
+                overall_cohesion = results['data']['overall_cohesion_score']
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Average Overall Cohesion", f"{overall_cohesion.mean():.1f}/10")
+                with col2:
+                    st.metric("Social Trust Component", f"{results['data']['social_trust_composite'].mean():.1f}/10")
+                with col3:
+                    st.metric("Community Cohesion Component", f"{results['data']['community_cohesion_composite'].mean():.1f}/10")
+                with col4:
+                    st.metric("Sentiment Component", f"{results['data']['sentiment_composite'].mean():.1f}/10")
             
             elif map_type == "Correlation Analysis":
                 st.subheader("Correlation Analysis")

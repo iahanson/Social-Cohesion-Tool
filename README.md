@@ -130,7 +130,7 @@ To integrate real data sources, replace the sample data generation functions wit
 1. **Clone or download this repository**
    ```bash
    git clone <repository-url>
-   cd "Find locales"
+   cd "Social Cohesion Tool"
    ```
 
 2. **Create virtual environment (recommended)**
