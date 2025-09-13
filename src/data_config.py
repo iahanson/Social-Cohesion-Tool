@@ -39,10 +39,10 @@ class DataConfig:
         default_config = {
             'imd_data': DataSourceConfig(
                 enabled=True,
-                use_real_data=False,
+                use_real_data=True,  # Enable real IMD data since we have the file
                 fallback_to_dummy=True,
                 data_url="https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/833970/File_1_-_IMD2019_Index_of_Multiple_Deprivation.xlsx",
-                local_file_path="data/imd_data.xlsx"
+                local_file_path="data/IMD2019_Index_of_Multiple_Deprivation.xlsx"
             ),
             'ons_census': DataSourceConfig(
                 enabled=True,
