@@ -78,6 +78,13 @@ class DataConfig:
                 fallback_to_dummy=False,
                 data_url="https://api.postcodes.io/",
                 local_file_path=None
+            ),
+            'good_neighbours': DataSourceConfig(
+                enabled=True,
+                use_real_data=True,  # Enable real Good Neighbours data
+                fallback_to_dummy=False,
+                data_url=None,  # No URL - local file only
+                local_file_path="data/good_neighbours_full_data_by_msoa.xlsx"
             )
         }
         

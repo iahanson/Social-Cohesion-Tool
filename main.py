@@ -16,6 +16,7 @@ from src.sentiment_mapping import SentimentMapping
 from src.intervention_tool import InterventionTool
 from src.engagement_simulator import EngagementSimulator
 from src.alert_system import AlertSystem
+from src.good_neighbours_connector import GoodNeighboursConnector
 from src.data_config import get_data_config
 
 @click.group()
@@ -180,6 +181,117 @@ def profile(msoa_code):
         click.echo("\nRecommendations:")
         for rec in profile['recommendations']:
             click.echo(f"- {rec}")
+
+# Good Neighbours Social Trust commands
+@cli.group()
+def trust():
+    """Good Neighbours social trust data analysis"""
+    pass
+
+@trust.command()
+@click.option('--output', '-o', default='console', help='Output format: console, json')
+def summary(output):
+    """Get summary of social trust data"""
+    click.echo("Loading Good Neighbours social trust data...")
+    
+    connector = GoodNeighboursConnector()
+    summary = connector.get_social_trust_summary()
+    
+    if summary is None:
+        click.echo("Error: Failed to load social trust data")
+        return
+    
+    if output == 'json':
+        click.echo(json.dumps(summary, indent=2))
+    else:
+        click.echo(f"Social Trust Data Summary:")
+        click.echo(f"Total MSOAs: {summary['total_msoas']}")
+        click.echo(f"Average Net Trust: {summary['average_net_trust']:.2f}")
+        click.echo(f"Trust Range: {summary['net_trust_range']['min']:.2f} to {summary['net_trust_range']['max']:.2f}")
+        click.echo(f"Standard Deviation: {summary['net_trust_range']['std']:.2f}")
+        
+        click.echo(f"\nTrust Distribution:")
+        dist = summary['net_trust_distribution']
+        click.echo(f"Positive Trust: {dist['positive_trust']} MSOAs")
+        click.echo(f"Negative Trust: {dist['negative_trust']} MSOAs")
+        click.echo(f"Neutral Trust: {dist['neutral_trust']} MSOAs")
+        
+        click.echo(f"\nHighest Trust MSOA:")
+        highest = summary['highest_trust_msoa']
+        click.echo(f"  {highest['name']} ({highest['code']}) - Net Trust: {highest['net_trust']:.2f}")
+        
+        click.echo(f"\nLowest Trust MSOA:")
+        lowest = summary['lowest_trust_msoa']
+        click.echo(f"  {lowest['name']} ({lowest['code']}) - Net Trust: {lowest['net_trust']:.2f}")
+
+@trust.command()
+@click.option('--msoa-code', '-m', required=True, help='MSOA code to look up')
+def lookup(msoa_code):
+    """Get social trust data for a specific MSOA"""
+    click.echo(f"Looking up social trust data for MSOA: {msoa_code}")
+    
+    connector = GoodNeighboursConnector()
+    trust_data = connector.get_social_trust_for_msoa(msoa_code)
+    
+    if trust_data is None:
+        click.echo(f"Error: No social trust data found for MSOA {msoa_code}")
+        return
+    
+    click.echo(f"\nSocial Trust Data for {msoa_code}:")
+    click.echo(f"MSOA Name: {trust_data['msoa_name']}")
+    click.echo(f"Net Trust Score: {trust_data['net_trust']:.2f}")
+    click.echo(f"Always/Usually Trust: {trust_data['always_usually_trust']:.1f}%")
+    click.echo(f"Usually/Almost Always Careful: {trust_data['usually_almost_always_careful']:.1f}%")
+    
+    # Interpretation
+    if trust_data['net_trust'] > 0:
+        click.echo(f"\nInterpretation: Positive net trust score indicates higher trust than caution")
+    elif trust_data['net_trust'] < 0:
+        click.echo(f"\nInterpretation: Negative net trust score indicates higher caution than trust")
+    else:
+        click.echo(f"\nInterpretation: Neutral net trust score indicates balanced trust and caution")
+
+@trust.command()
+@click.option('--top', '-t', default=10, help='Number of top trust areas to show')
+def top(top):
+    """Show top trust areas"""
+    click.echo(f"Loading top {top} trust areas...")
+    
+    connector = GoodNeighboursConnector()
+    top_areas = connector.get_top_trust_msoas(top)
+    
+    if not top_areas:
+        click.echo("Error: Failed to load top trust areas")
+        return
+    
+    click.echo(f"\nTop {top} Trust Areas:")
+    click.echo("-" * 80)
+    click.echo(f"{'Rank':<4} {'MSOA Name':<30} {'MSOA Code':<12} {'Net Trust':<10} {'Trust %':<8} {'Careful %':<10}")
+    click.echo("-" * 80)
+    
+    for i, area in enumerate(top_areas, 1):
+        click.echo(f"{i:<4} {area['msoa_name'][:29]:<30} {area['msoa_code']:<12} {area['net_trust']:<10.2f} {area['always_usually_trust']:<8.1f} {area['usually_almost_always_careful']:<10.1f}")
+
+@trust.command()
+@click.option('--bottom', '-b', default=10, help='Number of lowest trust areas to show')
+def lowest(bottom):
+    """Show lowest trust areas"""
+    click.echo(f"Loading lowest {bottom} trust areas...")
+    
+    connector = GoodNeighboursConnector()
+    lowest_areas = connector.get_lowest_trust_msoas(bottom)
+    
+    if not lowest_areas:
+        click.echo("Error: Failed to load lowest trust areas")
+        return
+    
+    click.echo(f"\nLowest {bottom} Trust Areas:")
+    click.echo("-" * 80)
+    click.echo(f"{'Rank':<4} {'MSOA Name':<30} {'MSOA Code':<12} {'Net Trust':<10} {'Trust %':<8} {'Careful %':<10}")
+    click.echo("-" * 80)
+    
+    for i, area in enumerate(lowest_areas, 1):
+        click.echo(f"{i:<4} {area['msoa_name'][:29]:<30} {area['msoa_code']:<12} {area['net_trust']:<10.2f} {area['always_usually_trust']:<8.1f} {area['usually_almost_always_careful']:<10.1f}")
 
 # Intervention Tool commands
 @cli.group()
