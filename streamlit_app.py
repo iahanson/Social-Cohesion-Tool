@@ -27,7 +27,7 @@ from src.sentiment_mapping import SentimentMapping
 from src.intervention_tool import InterventionTool
 from src.engagement_simulator import EngagementSimulator
 from src.alert_system import AlertSystem
-from src.good_neighbours_connector import GoodNeighboursConnector
+from src.unified_data_connector import UnifiedDataConnector
 from src.genai_text_analyzer import GenAITextAnalyzer
 from src.locality_mapper import LocalityMapper
 
@@ -80,8 +80,8 @@ if 'engagement_simulator' not in st.session_state:
     st.session_state.engagement_simulator = EngagementSimulator()
 if 'alert_system' not in st.session_state:
     st.session_state.alert_system = AlertSystem()
-if 'good_neighbours_connector' not in st.session_state:
-    st.session_state.good_neighbours_connector = GoodNeighboursConnector()
+if 'unified_data_connector' not in st.session_state:
+    st.session_state.unified_data_connector = UnifiedDataConnector()
 
 def main():
     """Main application function"""
@@ -777,88 +777,63 @@ def good_neighbours_page():
     # Run analysis
     if st.button("Run Analysis"):
         with st.spinner("Loading Good Neighbours data..."):
-            connector = st.session_state.good_neighbours_connector
+            connector = st.session_state.unified_data_connector
             
             if analysis_type == "Overview":
                 # Load data and show summary
-                df = connector.load_social_trust_data()
-                summary = connector.get_social_trust_summary()
-                
-                if df is not None and summary is not None:
-                    st.subheader("📊 Data Overview")
+                if connector.good_neighbours_data is not None:
+                    df = connector.good_neighbours_data
+                    summary = connector.get_data_summary()
                     
-                    # Key metrics
-                    col1, col2, col3, col4 = st.columns(4)
+                    if df is not None and summary is not None:
+                        st.subheader("📊 Data Overview")
+                        
+                        # Key metrics
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.metric("Total MSOAs", summary['total_msoas'])
+                        
+                        with col2:
+                            avg_trust = df['net_trust'].mean()
+                            st.metric("Average Net Trust", f"{avg_trust:.2f}")
+                        
+                        with col3:
+                            max_trust = df['net_trust'].max()
+                            st.metric("Highest Trust", f"{max_trust:.2f}")
+                        
+                        with col4:
+                            min_trust = df['net_trust'].min()
+                            st.metric("Lowest Trust", f"{min_trust:.2f}")
                     
-                    with col1:
-                        st.metric("Total MSOAs", summary['total_msoas'])
-                    
-                    with col2:
-                        st.metric("Average Net Trust", f"{summary['average_net_trust']:.2f}")
-                    
-                    with col3:
-                        st.metric("Highest Trust", f"{summary['net_trust_range']['max']:.2f}")
-                    
-                    with col4:
-                        st.metric("Lowest Trust", f"{summary['net_trust_range']['min']:.2f}")
-                    
-                    # Trust distribution
-                    st.subheader("Trust Distribution")
-                    trust_dist = summary['net_trust_distribution']
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Positive Trust", trust_dist['positive_trust'])
-                    with col2:
-                        st.metric("Negative Trust", trust_dist['negative_trust'])
-                    with col3:
-                        st.metric("Neutral Trust", trust_dist['neutral_trust'])
-                    
-                    # Net trust distribution chart
-                    st.subheader("Net Trust Distribution")
-                    fig = px.histogram(
-                        df,
-                        x='Net_trust',
-                        nbins=30,
-                        title="Distribution of Net Trust Scores",
-                        labels={'Net_trust': 'Net Trust Score', 'count': 'Number of MSOAs'},
-                        color_discrete_sequence=['#1f77b4']
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Trust components
-                    st.subheader("Trust Components")
-                    components = summary['trust_components']
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Always/Usually Trust", f"{components['average_always_usually_trust']:.1f}%")
-                    with col2:
-                        st.metric("Usually/Almost Always Careful", f"{components['average_usually_almost_always_careful']:.1f}%")
-                    
-                    # Scatter plot of trust components
-                    fig = px.scatter(
-                        df,
-                        x='always_trust OR usually_trust',
-                        y='usually_careful OR almost_always_careful',
-                        color='Net_trust',
-                        hover_data=['MSOA_name', 'MSOA_code'],
-                        title="Trust Components Relationship",
-                        color_continuous_scale='RdYlGn',
-                        labels={
-                            'always_trust OR usually_trust': 'Always/Usually Trust (%)',
-                            'usually_careful OR almost_always_careful': 'Usually/Almost Always Careful (%)'
-                        }
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
+                        # Trust distribution
+                        st.subheader("Trust Distribution")
+                        
+                        # Create trust distribution chart
+                        fig = px.histogram(df, x='net_trust', nbins=20, title='Net Trust Distribution')
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Trust categories
+                        positive_trust = len(df[df['net_trust'] > 0])
+                        negative_trust = len(df[df['net_trust'] < 0])
+                        neutral_trust = len(df[df['net_trust'] == 0])
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Positive Trust", positive_trust)
+                        with col2:
+                            st.metric("Negative Trust", negative_trust)
+                        with col3:
+                            st.metric("Neutral Trust", neutral_trust)
                 else:
                     st.error("Failed to load Good Neighbours data")
             
             elif analysis_type == "MSOA Lookup":
-                trust_data = connector.get_social_trust_for_msoa(msoa_code)
+                results = connector.get_msoa_data(msoa_code, ['good_neighbours'])
+                trust_result = results.get('good_neighbours')
                 
-                if trust_data:
+                if trust_result and trust_result.success:
+                    trust_data = trust_result.data
                     st.subheader(f"Social Trust Data for {msoa_code}")
                     
                     col1, col2 = st.columns(2)
@@ -883,7 +858,7 @@ def good_neighbours_page():
                     st.error(f"No social trust data found for MSOA {msoa_code}")
             
             elif analysis_type == "Top Trust Areas":
-                top_areas = connector.get_top_trust_msoas(n_areas)
+                top_areas = connector.get_top_performing_msoas('net_trust', n_areas, 'good_neighbours')
                 
                 if top_areas:
                     st.subheader(f"Top {n_areas} Trust Areas")
@@ -914,7 +889,9 @@ def good_neighbours_page():
                     st.error("Failed to load top trust areas")
             
             elif analysis_type == "Lowest Trust Areas":
-                lowest_areas = connector.get_lowest_trust_msoas(n_areas)
+                # Get lowest by reversing the order (ascending instead of descending)
+                all_areas = connector.get_top_performing_msoas('net_trust', 1000, 'good_neighbours')
+                lowest_areas = sorted(all_areas, key=lambda x: x['net_trust'])[:n_areas]
                 
                 if lowest_areas:
                     st.subheader(f"Lowest {n_areas} Trust Areas")

@@ -23,13 +23,17 @@ class LocalityInfo:
     confidence: float = 1.0
 
 class LocalityMapper:
-    """Maps localities to MSOA codes"""
+    """Maps localities to MSOA codes and handles MSOA operations"""
     
     def __init__(self):
         self.msoa_data = self._load_msoa_data()
         self.postcode_mapping = self._load_postcode_mapping()
         self.landmark_mapping = self._load_landmark_mapping()
         self.area_mapping = self._load_area_mapping()
+        
+        # API endpoints for live data
+        self.ons_postcode_url = "https://api.postcodes.io/postcodes/"
+        self.msoa_boundaries_url = "https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/MSOA_Names_and_Codes_England_and_Wales/FeatureServer/0/query"
     
     def _load_msoa_data(self) -> Dict[str, Dict[str, str]]:
         """Load MSOA data with local authority mappings"""
@@ -613,6 +617,81 @@ class LocalityMapper:
     def get_local_authorities(self) -> List[str]:
         """Get all local authorities"""
         return list(set(info["la"] for info in self.msoa_data.values()))
+    
+    def postcode_to_msoa(self, postcode: str) -> Optional[Dict[str, Any]]:
+        """
+        Convert UK postcode to MSOA information using postcodes.io API
+        
+        Args:
+            postcode: UK postcode (with or without space)
+            
+        Returns:
+            Dictionary containing MSOA information or None if not found
+        """
+        try:
+            # Clean postcode
+            clean_postcode = postcode.replace(" ", "").upper()
+            
+            # Use postcodes.io API
+            response = requests.get(f"{self.ons_postcode_url}{clean_postcode}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 200:
+                    result = data['result']
+                    return {
+                        'postcode': result['postcode'],
+                        'msoa_code': result.get('codes', {}).get('msoa'),
+                        'msoa_name': result.get('codes', {}).get('msoa'),
+                        'lsoa_code': result.get('codes', {}).get('lsoa'),
+                        'ward_code': result.get('codes', {}).get('ward'),
+                        'local_authority': result.get('admin_district'),
+                        'region': result.get('region'),
+                        'country': result.get('country'),
+                        'longitude': result.get('longitude'),
+                        'latitude': result.get('latitude')
+                    }
+            return None
+            
+        except Exception as e:
+            print(f"Error looking up postcode {postcode}: {e}")
+            return None
+    
+    def get_msoa_details(self, msoa_code: str) -> Optional[Dict[str, Any]]:
+        """
+        Get detailed information about an MSOA by its code
+        
+        Args:
+            msoa_code: MSOA code
+            
+        Returns:
+            Dictionary containing MSOA details or None if not found
+        """
+        try:
+            # Check if we have static data for this MSOA
+            if msoa_code in self.msoa_data:
+                msoa_info = self.msoa_data[msoa_code]
+                return {
+                    'msoa_code': msoa_code,
+                    'msoa_name': f"MSOA {msoa_code}",
+                    'local_authority': msoa_info['la'],
+                    'region': msoa_info['region'],
+                    'country': 'England',
+                    'status': 'Valid MSOA code'
+                }
+            
+            # If not in static data but valid format, return basic info
+            if self.validate_msoa_code(msoa_code):
+                return {
+                    'msoa_code': msoa_code,
+                    'msoa_name': f"MSOA {msoa_code}",
+                    'country': 'England',
+                    'status': 'Valid MSOA code'
+                }
+            return None
+        except Exception as e:
+            print(f"Error getting MSOA details for {msoa_code}: {e}")
+            return None
     
     def export_mapping_data(self, format: str = "json") -> str:
         """Export mapping data"""

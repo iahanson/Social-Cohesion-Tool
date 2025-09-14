@@ -8,15 +8,12 @@ and prioritizing interventions for local stakeholders.
 import click
 import json
 import pandas as pd
-from src.data_aggregator import MSOADataAggregator
-from src.msoa_search import MSOASearch
-from src.imd_connector import IMDConnector
+from src.unified_data_connector import UnifiedDataConnector
 from src.early_warning_system import EarlyWarningSystem
 from src.sentiment_mapping import SentimentMapping
 from src.intervention_tool import InterventionTool
 from src.engagement_simulator import EngagementSimulator
 from src.alert_system import AlertSystem
-from src.good_neighbours_connector import GoodNeighboursConnector
 from src.genai_text_analyzer import GenAITextAnalyzer
 from src.locality_mapper import LocalityMapper
 from src.data_config import get_data_config
@@ -42,17 +39,38 @@ def lookup(postcode, msoa_code, output):
         click.echo("Please provide either a postcode (-p) or MSOA code (-m)")
         return
     
-    aggregator = MSOADataAggregator()
+    mapper = LocalityMapper()
+    connector = UnifiedDataConnector()
     
     if postcode:
-        msoa_info = aggregator.get_msoa_by_postcode(postcode)
+        click.echo(f"Looking up postcode: {postcode}")
+        msoa_info = mapper.postcode_to_msoa(postcode)
+        if msoa_info and msoa_info.get('msoa_code'):
+            msoa_code = msoa_info['msoa_code']
+        else:
+            click.echo("Postcode not found")
+            return
     else:
-        msoa_info = aggregator.get_msoa_by_code(msoa_code)
+        msoa_code = msoa_code
     
-    if msoa_info:
-        aggregator.display_results(msoa_info, output)
+    # Get comprehensive data
+    results = connector.get_msoa_data(msoa_code)
+    
+    if output == 'json':
+        click.echo(json.dumps({msoa_code: {source: result.data for source, result in results.items() if result.success}}, indent=2))
+    elif output == 'csv':
+        csv_data = connector.export_data([msoa_code], 'csv')
+        click.echo(csv_data)
     else:
-        click.echo("MSOA not found")
+        # Console output
+        click.echo(f"\n=== MSOA Data Report: {msoa_code} ===")
+        for source, result in results.items():
+            if result.success:
+                click.echo(f"\n📊 {source.upper()} Data:")
+                for key, value in result.data.items():
+                    click.echo(f"   {key}: {value}")
+            else:
+                click.echo(f"\n❌ {source.upper()}: {result.error_message}")
 
 @msoa.command()
 def sources():
@@ -232,13 +250,15 @@ def lookup(msoa_code):
     """Get social trust data for a specific MSOA"""
     click.echo(f"Looking up social trust data for MSOA: {msoa_code}")
     
-    connector = GoodNeighboursConnector()
-    trust_data = connector.get_social_trust_for_msoa(msoa_code)
+    connector = UnifiedDataConnector()
+    results = connector.get_msoa_data(msoa_code, ['good_neighbours'])
     
-    if trust_data is None:
+    trust_result = results.get('good_neighbours')
+    if not trust_result or not trust_result.success:
         click.echo(f"Error: No social trust data found for MSOA {msoa_code}")
         return
     
+    trust_data = trust_result.data
     click.echo(f"\nSocial Trust Data for {msoa_code}:")
     click.echo(f"MSOA Name: {trust_data['msoa_name']}")
     click.echo(f"Net Trust Score: {trust_data['net_trust']:.2f}")
@@ -259,8 +279,8 @@ def top(top):
     """Show top trust areas"""
     click.echo(f"Loading top {top} trust areas...")
     
-    connector = GoodNeighboursConnector()
-    top_areas = connector.get_top_trust_msoas(top)
+    connector = UnifiedDataConnector()
+    top_areas = connector.get_top_performing_msoas('net_trust', top, 'good_neighbours')
     
     if not top_areas:
         click.echo("Error: Failed to load top trust areas")
@@ -280,8 +300,10 @@ def lowest(bottom):
     """Show lowest trust areas"""
     click.echo(f"Loading lowest {bottom} trust areas...")
     
-    connector = GoodNeighboursConnector()
-    lowest_areas = connector.get_lowest_trust_msoas(bottom)
+    connector = UnifiedDataConnector()
+    # Get lowest by reversing the order (ascending instead of descending)
+    all_areas = connector.get_top_performing_msoas('net_trust', 1000, 'good_neighbours')
+    lowest_areas = sorted(all_areas, key=lambda x: x['net_trust'])[:bottom]
     
     if not lowest_areas:
         click.echo("Error: Failed to load lowest trust areas")
