@@ -17,6 +17,8 @@ from src.intervention_tool import InterventionTool
 from src.engagement_simulator import EngagementSimulator
 from src.alert_system import AlertSystem
 from src.good_neighbours_connector import GoodNeighboursConnector
+from src.genai_text_analyzer import GenAITextAnalyzer
+from src.locality_mapper import LocalityMapper
 from src.data_config import get_data_config
 
 @click.group()
@@ -292,6 +294,269 @@ def lowest(bottom):
     
     for i, area in enumerate(lowest_areas, 1):
         click.echo(f"{i:<4} {area['msoa_name'][:29]:<30} {area['msoa_code']:<12} {area['net_trust']:<10.2f} {area['always_usually_trust']:<8.1f} {area['usually_almost_always_careful']:<10.1f}")
+
+# GenAI Text Analysis commands
+@cli.group()
+def genai():
+    """GenAI-powered text analysis for social cohesion issues"""
+    pass
+
+@genai.command()
+@click.option('--text', '-t', help='Text to analyze')
+@click.option('--file', '-f', help='File containing text to analyze')
+@click.option('--source', '-s', default='unknown', help='Source of the text (survey, social_media, report)')
+@click.option('--output', '-o', default='console', help='Output format: console, json, csv, summary')
+def analyze(text, file, source, output):
+    """Analyze text for social cohesion issues using GenAI"""
+    if not text and not file:
+        click.echo("Error: Please provide either --text or --file")
+        return
+    
+    if text and file:
+        click.echo("Error: Please provide either --text or --file, not both")
+        return
+    
+    # Get text content
+    if file:
+        try:
+            with open(file, 'r', encoding='utf-8') as f:
+                text_content = f.read()
+        except Exception as e:
+            click.echo(f"Error reading file: {e}")
+            return
+    else:
+        text_content = text
+    
+    click.echo("Analyzing text with GenAI...")
+    
+    try:
+        analyzer = GenAITextAnalyzer()
+        result = analyzer.analyze_text(text_content, source)
+        
+        if output == 'json':
+            click.echo(json.dumps(analyzer._result_to_dict(result), indent=2))
+        elif output == 'csv':
+            click.echo(analyzer.export_results([result], 'csv'))
+        elif output == 'summary':
+            click.echo(analyzer.export_results([result], 'summary'))
+        else:
+            # Console output
+            click.echo(f"\n=== GenAI Text Analysis Results ===")
+            click.echo(f"Text ID: {result.text_id}")
+            click.echo(f"Source: {result.source}")
+            click.echo(f"Timestamp: {result.timestamp}")
+            click.echo(f"Total Issues: {result.total_issues}")
+            click.echo(f"Critical: {result.critical_issues}, High: {result.high_issues}, Medium: {result.medium_issues}, Low: {result.low_issues}")
+            
+            click.echo(f"\nSummary: {result.summary}")
+            
+            if result.localities_found:
+                click.echo(f"\nLocalities Found:")
+                for locality in result.localities_found:
+                    click.echo(f"  - {locality['name']} ({locality['type']}) -> MSOA: {locality.get('msoa_code', 'Not mapped')}")
+            
+            if result.issues:
+                click.echo(f"\nIssues Identified:")
+                for i, issue in enumerate(result.issues, 1):
+                    click.echo(f"\n{i}. {issue.issue_type.upper()} - {issue.severity} Severity")
+                    click.echo(f"   Description: {issue.description}")
+                    click.echo(f"   Confidence: {issue.confidence:.2f}")
+                    if issue.location_mentioned:
+                        click.echo(f"   Location: {issue.location_mentioned}")
+                    if issue.msoa_code:
+                        click.echo(f"   MSOA: {issue.msoa_code}")
+                    if issue.local_authority:
+                        click.echo(f"   Local Authority: {issue.local_authority}")
+                    if issue.keywords:
+                        click.echo(f"   Keywords: {', '.join(issue.keywords)}")
+                    if issue.context:
+                        click.echo(f"   Context: {issue.context}")
+            
+            if result.recommendations:
+                click.echo(f"\nRecommendations:")
+                for i, rec in enumerate(result.recommendations, 1):
+                    click.echo(f"{i}. {rec}")
+    
+    except Exception as e:
+        click.echo(f"Error during analysis: {e}")
+        click.echo("Please check your Azure OpenAI configuration in the .env file")
+
+@genai.command()
+@click.option('--locality', '-l', required=True, help='Locality to map to MSOA')
+def map_locality(locality):
+    """Map a locality to MSOA code"""
+    click.echo(f"Mapping locality: {locality}")
+    
+    try:
+        mapper = LocalityMapper()
+        result = mapper.map_locality(locality)
+        
+        if result:
+            click.echo(f"\nLocality Mapping Result:")
+            click.echo(f"Name: {result.name}")
+            click.echo(f"Type: {result.type}")
+            click.echo(f"MSOA Code: {result.msoa_code}")
+            click.echo(f"Local Authority: {result.local_authority}")
+            click.echo(f"Region: {result.region}")
+            click.echo(f"Confidence: {result.confidence:.2f}")
+        else:
+            click.echo(f"No mapping found for: {locality}")
+            click.echo("Try searching for similar localities:")
+            
+            # Try fuzzy search
+            search_results = mapper.search_localities(locality)
+            if search_results:
+                click.echo(f"\nSimilar localities found:")
+                for result in search_results[:5]:  # Show top 5
+                    click.echo(f"  - {result.name} ({result.type}) -> {result.msoa_code}")
+            else:
+                click.echo("No similar localities found")
+    
+    except Exception as e:
+        click.echo(f"Error mapping locality: {e}")
+
+@genai.command()
+@click.option('--query', '-q', required=True, help='Search query for localities')
+def search_localities(query):
+    """Search for localities matching a query"""
+    click.echo(f"Searching localities for: {query}")
+    
+    try:
+        mapper = LocalityMapper()
+        results = mapper.search_localities(query)
+        
+        if results:
+            click.echo(f"\nFound {len(results)} localities:")
+            for result in results:
+                click.echo(f"  - {result.name} ({result.type})")
+                click.echo(f"    MSOA: {result.msoa_code}")
+                click.echo(f"    Local Authority: {result.local_authority}")
+                click.echo(f"    Confidence: {result.confidence:.2f}")
+                click.echo("")
+        else:
+            click.echo(f"No localities found for: {query}")
+    
+    except Exception as e:
+        click.echo(f"Error searching localities: {e}")
+
+@genai.command()
+@click.option('--msoa-code', '-m', required=True, help='MSOA code to validate')
+def validate_msoa(msoa_code):
+    """Validate an MSOA code"""
+    try:
+        mapper = LocalityMapper()
+        is_valid = mapper.validate_msoa_code(msoa_code)
+        
+        if is_valid:
+            msoa_info = mapper.get_msoa_info(msoa_code)
+            click.echo(f"✅ MSOA code {msoa_code} is valid")
+            click.echo(f"Local Authority: {msoa_info['la']}")
+            click.echo(f"Region: {msoa_info['region']}")
+        else:
+            click.echo(f"❌ MSOA code {msoa_code} is not valid")
+            click.echo("Available MSOA codes:")
+            all_codes = mapper.get_all_msoa_codes()
+            for code in all_codes[:10]:  # Show first 10
+                click.echo(f"  - {code}")
+            if len(all_codes) > 10:
+                click.echo(f"  ... and {len(all_codes) - 10} more")
+    
+    except Exception as e:
+        click.echo(f"Error validating MSOA code: {e}")
+
+@genai.command()
+@click.option('--file', '-f', required=True, help='File containing multiple texts to analyze')
+@click.option('--source', '-s', default='batch', help='Source identifier for the batch')
+@click.option('--output', '-o', default='json', help='Output format: json, csv, summary')
+def batch_analyze(file, source, output):
+    """Analyze multiple texts from a file"""
+    try:
+        with open(file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Split by double newlines or other delimiters
+        texts = [text.strip() for text in content.split('\n\n') if text.strip()]
+        
+        if not texts:
+            click.echo("No texts found in file")
+            return
+        
+        click.echo(f"Analyzing {len(texts)} texts...")
+        
+        analyzer = GenAITextAnalyzer()
+        text_tuples = [(text, f"{source}_{i+1}", f"batch_{i+1}") for i, text in enumerate(texts)]
+        results = analyzer.analyze_multiple_texts(text_tuples)
+        
+        if output == 'json':
+            click.echo(analyzer.export_results(results, 'json'))
+        elif output == 'csv':
+            click.echo(analyzer.export_results(results, 'csv'))
+        elif output == 'summary':
+            click.echo(analyzer.export_results(results, 'summary'))
+        else:
+            click.echo(f"Batch analysis completed. Processed {len(results)} texts.")
+            total_issues = sum(result.total_issues for result in results)
+            total_critical = sum(result.critical_issues for result in results)
+            click.echo(f"Total issues found: {total_issues} (Critical: {total_critical})")
+    
+    except Exception as e:
+        click.echo(f"Error during batch analysis: {e}")
+
+@genai.command()
+@click.option('--text1', '-t1', required=True, help='First text for similarity comparison')
+@click.option('--text2', '-t2', required=True, help='Second text for similarity comparison')
+def similarity(text1, text2):
+    """Calculate similarity between two texts using embeddings"""
+    click.echo("Calculating text similarity...")
+    
+    try:
+        analyzer = GenAITextAnalyzer()
+        similarity_score = analyzer.calculate_text_similarity(text1, text2)
+        
+        click.echo(f"\nText Similarity Analysis:")
+        click.echo(f"Text 1: {text1[:100]}...")
+        click.echo(f"Text 2: {text2[:100]}...")
+        click.echo(f"Similarity Score: {similarity_score:.4f}")
+        
+        if similarity_score > 0.8:
+            click.echo("✅ Very similar texts")
+        elif similarity_score > 0.6:
+            click.echo("🟡 Moderately similar texts")
+        elif similarity_score > 0.4:
+            click.echo("🟠 Somewhat similar texts")
+        else:
+            click.echo("❌ Dissimilar texts")
+    
+    except Exception as e:
+        click.echo(f"Error calculating similarity: {e}")
+
+@genai.command()
+@click.option('--text', '-t', required=True, help='Text to generate embedding for')
+@click.option('--output', '-o', default='console', help='Output format: console, json')
+def embed(text, output):
+    """Generate embedding for a text"""
+    click.echo("Generating embedding...")
+    
+    try:
+        analyzer = GenAITextAnalyzer()
+        embedding = analyzer.generate_single_embedding(text)
+        
+        if output == 'json':
+            click.echo(json.dumps({
+                "text": text,
+                "embedding": embedding,
+                "model": analyzer.embedding_model,
+                "dimensions": len(embedding)
+            }, indent=2))
+        else:
+            click.echo(f"\nEmbedding Analysis:")
+            click.echo(f"Text: {text}")
+            click.echo(f"Model: {analyzer.embedding_model}")
+            click.echo(f"Dimensions: {len(embedding)}")
+            click.echo(f"First 10 values: {embedding[:10]}")
+    
+    except Exception as e:
+        click.echo(f"Error generating embedding: {e}")
 
 # Intervention Tool commands
 @cli.group()

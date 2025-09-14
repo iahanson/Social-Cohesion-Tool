@@ -28,6 +28,8 @@ from src.intervention_tool import InterventionTool
 from src.engagement_simulator import EngagementSimulator
 from src.alert_system import AlertSystem
 from src.good_neighbours_connector import GoodNeighboursConnector
+from src.genai_text_analyzer import GenAITextAnalyzer
+from src.locality_mapper import LocalityMapper
 
 # Page configuration
 st.set_page_config(
@@ -99,6 +101,7 @@ def main():
             "💡 Intervention Recommendations",
             "🎯 Engagement Simulator",
             "📧 Alert Management",
+            "🤖 GenAI Text Analysis",
             "⚙️ System Settings"
         ]
     )
@@ -118,6 +121,8 @@ def main():
         engagement_simulator_page()
     elif page == "📧 Alert Management":
         alert_management_page()
+    elif page == "🤖 GenAI Text Analysis":
+        genai_text_analysis_page()
     elif page == "⚙️ System Settings":
         settings_page()
 
@@ -837,7 +842,6 @@ def good_neighbours_page():
                         x='always_trust OR usually_trust',
                         y='usually_careful OR almost_always_careful',
                         color='Net_trust',
-                        size='Net_trust',
                         hover_data=['MSOA_name', 'MSOA_code'],
                         title="Trust Components Relationship",
                         color_continuous_scale='RdYlGn',
@@ -903,7 +907,7 @@ def good_neighbours_page():
                         color='net_trust',
                         color_continuous_scale='Greens'
                     )
-                    fig.update_xaxis(tickangle=45)
+                    fig.update_layout(xaxis_tickangle=45)
                     st.plotly_chart(fig, use_container_width=True)
                     
                 else:
@@ -934,7 +938,7 @@ def good_neighbours_page():
                         color='net_trust',
                         color_continuous_scale='Reds'
                     )
-                    fig.update_xaxis(tickangle=45)
+                    fig.update_layout(xaxis_tickangle=45)
                     st.plotly_chart(fig, use_container_width=True)
                     
                 else:
@@ -974,7 +978,6 @@ def good_neighbours_page():
                         x='always_trust OR usually_trust',
                         y='usually_careful OR almost_always_careful',
                         color='Net_trust',
-                        size='Net_trust',
                         hover_data=['MSOA_name', 'MSOA_code'],
                         title="Trust vs Caution Relationship",
                         color_continuous_scale='RdYlGn',
@@ -1359,6 +1362,576 @@ def settings_page():
                 st.success("Settings imported successfully!")
             except Exception as e:
                 st.error(f"Error importing settings: {e}")
+
+def genai_text_analysis_page():
+    """GenAI Text Analysis page"""
+    st.header("🤖 GenAI Text Analysis")
+    st.markdown("Analyze text for social cohesion issues using Azure OpenAI")
+    
+    # Check if Azure OpenAI is configured
+    try:
+        analyzer = GenAITextAnalyzer()
+        st.success("✅ Azure OpenAI connection configured")
+    except Exception as e:
+        st.error(f"❌ Azure OpenAI configuration error: {e}")
+        st.info("Please configure Azure OpenAI settings in your .env file")
+        return
+    
+    # Create tabs for different analysis modes
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Single Text Analysis", "📁 Batch Analysis", "🗺️ Locality Mapping", "🔍 Embedding & Similarity", "📊 Analysis Results"])
+    
+    with tab1:
+        st.subheader("Single Text Analysis")
+        
+        # Text input options
+        input_method = st.radio(
+            "Choose input method:",
+            ["Type text", "Upload file", "Paste from clipboard"]
+        )
+        
+        text_content = ""
+        
+        if input_method == "Type text":
+            text_content = st.text_area(
+                "Enter text to analyze:",
+                height=200,
+                placeholder="Enter survey responses, social media posts, reports, or any text related to social cohesion..."
+            )
+        elif input_method == "Upload file":
+            uploaded_file = st.file_uploader(
+                "Upload a text file:",
+                type=['txt', 'csv', 'json'],
+                help="Supported formats: .txt, .csv, .json"
+            )
+            if uploaded_file is not None:
+                try:
+                    text_content = str(uploaded_file.read(), "utf-8")
+                    st.success(f"File uploaded: {uploaded_file.name}")
+                except Exception as e:
+                    st.error(f"Error reading file: {e}")
+        else:  # Paste from clipboard
+            text_content = st.text_area(
+                "Paste text from clipboard:",
+                height=200,
+                placeholder="Paste text here..."
+            )
+        
+        # Analysis options
+        col1, col2 = st.columns(2)
+        with col1:
+            source = st.selectbox(
+                "Text source:",
+                ["survey", "social_media", "report", "interview", "feedback", "other"]
+            )
+        with col2:
+            analysis_type = st.selectbox(
+                "Analysis focus:",
+                ["comprehensive", "social_cohesion_only", "location_focused", "sentiment_only"]
+            )
+        
+        # Analyze button
+        if st.button("🔍 Analyze Text", type="primary"):
+            if not text_content.strip():
+                st.warning("Please enter some text to analyze")
+            else:
+                with st.spinner("Analyzing text with GenAI..."):
+                    try:
+                        result = analyzer.analyze_text(text_content, source)
+                        
+                        # Display results
+                        st.success("Analysis completed!")
+                        
+                        # Summary metrics
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Total Issues", result.total_issues)
+                        with col2:
+                            st.metric("Critical Issues", result.critical_issues, delta=None)
+                        with col3:
+                            st.metric("High Priority", result.high_issues, delta=None)
+                        with col4:
+                            st.metric("Localities Found", len(result.localities_found))
+                        
+                        # Issues breakdown
+                        if result.issues:
+                            st.subheader("🚨 Issues Identified")
+                            
+                            # Create a DataFrame for better display
+                            issues_data = []
+                            for issue in result.issues:
+                                issues_data.append({
+                                    "Type": issue.issue_type.replace("_", " ").title(),
+                                    "Severity": issue.severity,
+                                    "Confidence": f"{issue.confidence:.2f}",
+                                    "Description": issue.description,
+                                    "Location": issue.location_mentioned or "Not specified",
+                                    "MSOA": issue.msoa_code or "Not mapped",
+                                    "Local Authority": issue.local_authority or "Not specified"
+                                })
+                            
+                            issues_df = pd.DataFrame(issues_data)
+                            st.dataframe(issues_df, use_container_width=True)
+                            
+                            # Severity distribution
+                            severity_counts = issues_df['Severity'].value_counts()
+                            fig = px.pie(
+                                values=severity_counts.values,
+                                names=severity_counts.index,
+                                title="Issue Severity Distribution",
+                                color_discrete_map={
+                                    "Critical": "#FF0000",
+                                    "High": "#FF8C00",
+                                    "Medium": "#FFD700",
+                                    "Low": "#90EE90"
+                                }
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Localities found
+                        if result.localities_found:
+                            st.subheader("🗺️ Localities Identified")
+                            localities_data = []
+                            for locality in result.localities_found:
+                                localities_data.append({
+                                    "Name": locality['name'],
+                                    "Type": locality['type'],
+                                    "MSOA Code": locality.get('msoa_code', 'Not mapped'),
+                                    "Context": locality.get('context', '')
+                                })
+                            
+                            localities_df = pd.DataFrame(localities_data)
+                            st.dataframe(localities_df, use_container_width=True)
+                        
+                        # Recommendations
+                        if result.recommendations:
+                            st.subheader("💡 Recommendations")
+                            for i, rec in enumerate(result.recommendations, 1):
+                                st.write(f"{i}. {rec}")
+                        
+                        # Export options
+                        st.subheader("📥 Export Results")
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.download_button(
+                                label="Download JSON",
+                                data=json.dumps(analyzer._result_to_dict(result), indent=2),
+                                file_name=f"genai_analysis_{result.text_id}.json",
+                                mime="application/json"
+                            )
+                        
+                        with col2:
+                            csv_data = analyzer.export_results([result], 'csv')
+                            st.download_button(
+                                label="Download CSV",
+                                data=csv_data,
+                                file_name=f"genai_analysis_{result.text_id}.csv",
+                                mime="text/csv"
+                            )
+                        
+                        with col3:
+                            summary_data = analyzer.export_results([result], 'summary')
+                            st.download_button(
+                                label="Download Summary",
+                                data=summary_data,
+                                file_name=f"genai_analysis_{result.text_id}.txt",
+                                mime="text/plain"
+                            )
+                    
+                    except Exception as e:
+                        st.error(f"Analysis failed: {e}")
+                        st.info("Please check your Azure OpenAI configuration")
+    
+    with tab2:
+        st.subheader("Batch Analysis")
+        st.info("Upload multiple texts for batch analysis")
+        
+        uploaded_files = st.file_uploader(
+            "Upload text files:",
+            type=['txt', 'csv'],
+            accept_multiple_files=True,
+            help="Upload multiple files for batch processing"
+        )
+        
+        if uploaded_files:
+            st.write(f"Uploaded {len(uploaded_files)} files")
+            
+            if st.button("🔍 Analyze All Files", type="primary"):
+                with st.spinner("Processing batch analysis..."):
+                    try:
+                        texts = []
+                        for file in uploaded_files:
+                            content = str(file.read(), "utf-8")
+                            texts.append((content, f"file_{file.name}", file.name))
+                        
+                        results = analyzer.analyze_multiple_texts(texts)
+                        
+                        # Summary statistics
+                        total_issues = sum(result.total_issues for result in results)
+                        total_critical = sum(result.critical_issues for result in results)
+                        total_files = len(results)
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Files Processed", total_files)
+                        with col2:
+                            st.metric("Total Issues", total_issues)
+                        with col3:
+                            st.metric("Critical Issues", total_critical)
+                        
+                        # Results table
+                        results_data = []
+                        for result in results:
+                            results_data.append({
+                                "File": result.text_id,
+                                "Source": result.source,
+                                "Total Issues": result.total_issues,
+                                "Critical": result.critical_issues,
+                                "High": result.high_issues,
+                                "Medium": result.medium_issues,
+                                "Low": result.low_issues,
+                                "Localities": len(result.localities_found)
+                            })
+                        
+                        results_df = pd.DataFrame(results_data)
+                        st.dataframe(results_df, use_container_width=True)
+                        
+                        # Export batch results
+                        st.subheader("📥 Export Batch Results")
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            batch_json = analyzer.export_results(results, 'json')
+                            st.download_button(
+                                label="Download Batch JSON",
+                                data=batch_json,
+                                file_name=f"batch_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                                mime="application/json"
+                            )
+                        
+                        with col2:
+                            batch_csv = analyzer.export_results(results, 'csv')
+                            st.download_button(
+                                label="Download Batch CSV",
+                                data=batch_csv,
+                                file_name=f"batch_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv"
+                            )
+                    
+                    except Exception as e:
+                        st.error(f"Batch analysis failed: {e}")
+    
+    with tab3:
+        st.subheader("Locality Mapping")
+        st.info("Map localities to MSOA codes")
+        
+        mapper = LocalityMapper()
+        
+        # Single locality mapping
+        st.write("**Single Locality Mapping**")
+        locality_input = st.text_input(
+            "Enter locality name:",
+            placeholder="e.g., Kensington, SW1A 1AA, Hyde Park"
+        )
+        
+        if st.button("🗺️ Map Locality"):
+            if locality_input:
+                result = mapper.map_locality(locality_input)
+                if result:
+                    st.success("✅ Locality mapped successfully!")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Name:** {result.name}")
+                        st.write(f"**Type:** {result.type}")
+                        st.write(f"**MSOA Code:** {result.msoa_code}")
+                    with col2:
+                        st.write(f"**Local Authority:** {result.local_authority}")
+                        st.write(f"**Region:** {result.region}")
+                        st.write(f"**Confidence:** {result.confidence:.2f}")
+                else:
+                    st.warning("❌ No mapping found for this locality")
+                    
+                    # Try fuzzy search
+                    search_results = mapper.search_localities(locality_input)
+                    if search_results:
+                        st.write("**Similar localities found:**")
+                        for result in search_results[:5]:
+                            st.write(f"- {result.name} ({result.type}) -> {result.msoa_code}")
+        
+        # Locality search
+        st.write("**Locality Search**")
+        search_query = st.text_input(
+            "Search for localities:",
+            placeholder="e.g., park, station, market"
+        )
+        
+        if st.button("🔍 Search Localities"):
+            if search_query:
+                results = mapper.search_localities(search_query)
+                if results:
+                    st.write(f"Found {len(results)} localities:")
+                    
+                    search_data = []
+                    for result in results:
+                        search_data.append({
+                            "Name": result.name,
+                            "Type": result.type,
+                            "MSOA Code": result.msoa_code,
+                            "Local Authority": result.local_authority,
+                            "Confidence": f"{result.confidence:.2f}"
+                        })
+                    
+                    search_df = pd.DataFrame(search_data)
+                    st.dataframe(search_df, use_container_width=True)
+                else:
+                    st.info("No localities found for this search")
+        
+        # MSOA validation
+        st.write("**MSOA Code Validation**")
+        msoa_input = st.text_input(
+            "Enter MSOA code to validate:",
+            placeholder="e.g., E02000001"
+        )
+        
+        if st.button("✅ Validate MSOA"):
+            if msoa_input:
+                is_valid = mapper.validate_msoa_code(msoa_input)
+                if is_valid:
+                    msoa_info = mapper.get_msoa_info(msoa_input)
+                    st.success(f"✅ MSOA code {msoa_input} is valid")
+                    st.write(f"**Local Authority:** {msoa_info['la']}")
+                    st.write(f"**Region:** {msoa_info['region']}")
+                else:
+                    st.error(f"❌ MSOA code {msoa_input} is not valid")
+    
+    with tab4:
+        st.subheader("Embedding & Similarity Analysis")
+        st.info("Generate embeddings and calculate text similarity using Azure OpenAI")
+        
+        # Embedding generation
+        st.write("**Generate Embeddings**")
+        embed_text = st.text_area(
+            "Enter text to generate embedding:",
+            height=100,
+            placeholder="Enter text to convert to vector representation..."
+        )
+        
+        if st.button("🔢 Generate Embedding"):
+            if embed_text:
+                with st.spinner("Generating embedding..."):
+                    try:
+                        embedding = analyzer.generate_single_embedding(embed_text)
+                        
+                        st.success("✅ Embedding generated successfully!")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Model", analyzer.embedding_model)
+                        with col2:
+                            st.metric("Dimensions", len(embedding))
+                        
+                        # Show embedding statistics
+                        import numpy as np
+                        embedding_array = np.array(embedding)
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Mean", f"{embedding_array.mean():.4f}")
+                        with col2:
+                            st.metric("Std Dev", f"{embedding_array.std():.4f}")
+                        with col3:
+                            st.metric("Min", f"{embedding_array.min():.4f}")
+                        
+                        # Show first few dimensions
+                        st.write("**First 20 dimensions:**")
+                        st.code(embedding[:20])
+                        
+                        # Download embedding
+                        embed_data = {
+                            "text": embed_text,
+                            "embedding": embedding,
+                            "model": analyzer.embedding_model,
+                            "dimensions": len(embedding),
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        
+                        st.download_button(
+                            label="📥 Download Embedding JSON",
+                            data=json.dumps(embed_data, indent=2),
+                            file_name=f"embedding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                            mime="application/json"
+                        )
+                    
+                    except Exception as e:
+                        st.error(f"Error generating embedding: {e}")
+            else:
+                st.warning("Please enter text to generate embedding")
+        
+        st.markdown("---")
+        
+        # Text similarity
+        st.write("**Text Similarity Analysis**")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            text1 = st.text_area(
+                "First text:",
+                height=100,
+                placeholder="Enter first text for comparison..."
+            )
+        
+        with col2:
+            text2 = st.text_area(
+                "Second text:",
+                height=100,
+                placeholder="Enter second text for comparison..."
+            )
+        
+        if st.button("🔍 Calculate Similarity"):
+            if text1 and text2:
+                with st.spinner("Calculating similarity..."):
+                    try:
+                        similarity_score = analyzer.calculate_text_similarity(text1, text2)
+                        
+                        st.success("✅ Similarity calculated!")
+                        
+                        # Display similarity score
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Similarity Score", f"{similarity_score:.4f}")
+                        with col2:
+                            if similarity_score > 0.8:
+                                st.metric("Interpretation", "Very Similar", delta="✅")
+                            elif similarity_score > 0.6:
+                                st.metric("Interpretation", "Moderately Similar", delta="🟡")
+                            elif similarity_score > 0.4:
+                                st.metric("Interpretation", "Somewhat Similar", delta="🟠")
+                            else:
+                                st.metric("Interpretation", "Dissimilar", delta="❌")
+                        with col3:
+                            st.metric("Confidence", f"{similarity_score * 100:.1f}%")
+                        
+                        # Similarity visualization
+                        fig = go.Figure(go.Indicator(
+                            mode = "gauge+number+delta",
+                            value = similarity_score,
+                            domain = {'x': [0, 1], 'y': [0, 1]},
+                            title = {'text': "Similarity Score"},
+                            delta = {'reference': 0.5},
+                            gauge = {
+                                'axis': {'range': [None, 1]},
+                                'bar': {'color': "darkblue"},
+                                'steps': [
+                                    {'range': [0, 0.3], 'color': "lightgray"},
+                                    {'range': [0.3, 0.6], 'color': "yellow"},
+                                    {'range': [0.6, 0.8], 'color': "orange"},
+                                    {'range': [0.8, 1], 'color': "green"}
+                                ],
+                                'threshold': {
+                                    'line': {'color': "red", 'width': 4},
+                                    'thickness': 0.75,
+                                    'value': 0.9
+                                }
+                            }
+                        ))
+                        
+                        fig.update_layout(height=300)
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Text previews
+                        st.write("**Text Comparison:**")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write("**Text 1:**")
+                            st.text_area("", value=text1, height=100, disabled=True)
+                        with col2:
+                            st.write("**Text 2:**")
+                            st.text_area("", value=text2, height=100, disabled=True)
+                    
+                    except Exception as e:
+                        st.error(f"Error calculating similarity: {e}")
+            else:
+                st.warning("Please enter both texts for comparison")
+        
+        st.markdown("---")
+        
+        # Batch embedding generation
+        st.write("**Batch Embedding Generation**")
+        batch_texts = st.text_area(
+            "Enter multiple texts (one per line):",
+            height=150,
+            placeholder="Text 1\nText 2\nText 3\n..."
+        )
+        
+        if st.button("🔢 Generate Batch Embeddings"):
+            if batch_texts:
+                texts = [text.strip() for text in batch_texts.split('\n') if text.strip()]
+                
+                if texts:
+                    with st.spinner(f"Generating embeddings for {len(texts)} texts..."):
+                        try:
+                            embeddings = analyzer.generate_embeddings(texts)
+                            
+                            st.success(f"✅ Generated {len(embeddings)} embeddings!")
+                            
+                            # Create results DataFrame
+                            results_data = []
+                            for i, (text, embedding) in enumerate(zip(texts, embeddings)):
+                                results_data.append({
+                                    "Index": i + 1,
+                                    "Text": text[:100] + "..." if len(text) > 100 else text,
+                                    "Dimensions": len(embedding),
+                                    "Mean": np.array(embedding).mean(),
+                                    "Std": np.array(embedding).std()
+                                })
+                            
+                            results_df = pd.DataFrame(results_data)
+                            st.dataframe(results_df, use_container_width=True)
+                            
+                            # Download batch embeddings
+                            batch_data = {
+                                "texts": texts,
+                                "embeddings": embeddings,
+                                "model": analyzer.embedding_model,
+                                "timestamp": datetime.now().isoformat()
+                            }
+                            
+                            st.download_button(
+                                label="📥 Download Batch Embeddings JSON",
+                                data=json.dumps(batch_data, indent=2),
+                                file_name=f"batch_embeddings_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                                mime="application/json"
+                            )
+                        
+                        except Exception as e:
+                            st.error(f"Error generating batch embeddings: {e}")
+                else:
+                    st.warning("No valid texts found")
+            else:
+                st.warning("Please enter texts for batch processing")
+    
+    with tab5:
+        st.subheader("Analysis Results & Statistics")
+        st.info("View aggregated analysis results and statistics")
+        
+        # Placeholder for future implementation
+        st.write("This section will show:")
+        st.write("- Historical analysis trends")
+        st.write("- Issue type distributions")
+        st.write("- Geographic analysis patterns")
+        st.write("- Performance metrics")
+        
+        # Sample statistics
+        st.subheader("Sample Statistics")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Total MSOAs", len(mapper.get_all_msoa_codes()))
+        with col2:
+            st.metric("Local Authorities", len(mapper.get_local_authorities()))
+        with col3:
+            st.metric("Issue Categories", len(analyzer.issue_categories))
 
 if __name__ == "__main__":
     main()
