@@ -1,7 +1,7 @@
 """
 GenAI Text Analyzer for Social Cohesion
-Uses Azure OpenAI GPT-4.1-mini to analyze text for social cohesion issues
-and identify localities for MSOA mapping
+Supports both Azure OpenAI GPT-4.1-mini and AWS Bedrock Claude Sonnet 4
+to analyze text for social cohesion issues and identify localities for MSOA mapping
 """
 
 import os
@@ -13,6 +13,11 @@ from datetime import datetime
 import openai
 from openai import AzureOpenAI
 import pandas as pd
+from dotenv import load_dotenv
+from .aws_bedrock_client import AWSBedrockClient
+
+# Load environment variables from .env file
+load_dotenv(override=True)
 
 @dataclass
 class SocialCohesionIssue:
@@ -47,14 +52,34 @@ class GenAITextAnalyzer:
     """GenAI-powered text analyzer for social cohesion issues"""
     
     def __init__(self):
-        # Initialize Azure OpenAI client
-        self.client = self._initialize_azure_openai()
+        # Determine which provider to use
+        self.provider = os.getenv("GENAI_PROVIDER", "azure").lower()
+        print(f"🔍 Detected provider: {self.provider}")
+        
+        if self.provider == "aws":
+            try:
+                # Initialize AWS Bedrock client
+                self.bedrock_client = AWSBedrockClient()
+                self.client = self.bedrock_client
+                self.model = os.getenv("AWS_BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0")
+                print("✅ Using AWS Bedrock Claude Sonnet 4")
+            except Exception as e:
+                print(f"❌ Failed to initialize AWS Bedrock: {e}")
+                print("🔄 Falling back to Azure OpenAI")
+                self.provider = "azure"
+                self.client = self._initialize_azure_openai()
+                self.model = os.getenv("AZURE_OPENAI_MODEL", "gpt-4.1-mini")
+                self.embedding_model = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL", "text-embedding-3-large")
+                print("✅ Using Azure OpenAI GPT-4.1-mini (fallback)")
+        else:
+            # Initialize Azure OpenAI client (default)
+            self.client = self._initialize_azure_openai()
+            self.model = os.getenv("AZURE_OPENAI_MODEL", "gpt-4.1-mini")
+            self.embedding_model = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL", "text-embedding-3-large")
+            print("✅ Using Azure OpenAI GPT-4.1-mini")
         
         # Load locality mapping data
         self.locality_mapping = self._load_locality_mapping()
-        
-        # Embedding model configuration
-        self.embedding_model = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL", "text-embedding-3-large")
         
         # Define social cohesion issue categories
         self.issue_categories = {
@@ -190,7 +215,7 @@ class GenAITextAnalyzer:
             raise
     
     def _analyze_with_genai(self, text: str) -> Dict[str, Any]:
-        """Use Azure OpenAI to analyze text for social cohesion issues"""
+        """Use GenAI (Azure OpenAI or AWS Bedrock) to analyze text for social cohesion issues"""
         
         system_prompt = """You are an expert social cohesion analyst. Your task is to analyze text for social cohesion issues and identify localities mentioned.
 
@@ -228,18 +253,31 @@ Return your analysis as a JSON object with this structure:
         user_prompt = f"Please analyze this text for social cohesion issues:\n\n{text}"
         
         try:
-            response = self.client.chat.completions.create(
-                model=os.getenv("AZURE_OPENAI_MODEL", "gpt-4.1-mini"),
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3,
-                max_tokens=2000
-            )
+            if self.provider == "aws":
+                # Use AWS Bedrock
+                response = self.bedrock_client.generate_text(user_prompt, system_prompt)
+                
+                if not response['success']:
+                    raise Exception(f"AWS Bedrock error: {response['error']}")
+                
+                ai_response = response['content']
+                
+            else:
+                # Use Azure OpenAI
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=2000
+                )
+                
+                ai_response = response.choices[0].message.content
             
             # Parse the response
-            content = response.choices[0].message.content
+            content = ai_response
             
             # Extract JSON from the response
             json_match = re.search(r'\{.*\}', content, re.DOTALL)
@@ -450,14 +488,19 @@ Return your analysis as a JSON object with this structure:
             List of embedding vectors
         """
         try:
-            embeddings = []
-            for text in texts:
-                response = self.client.embeddings.create(
-                    model=self.embedding_model,
-                    input=text
-                )
-                embeddings.append(response.data[0].embedding)
-            return embeddings
+            if self.provider == "aws":
+                # Use AWS Bedrock for embeddings
+                return self.bedrock_client.generate_embeddings(texts)
+            else:
+                # Use Azure OpenAI for embeddings
+                embeddings = []
+                for text in texts:
+                    response = self.client.embeddings.create(
+                        model=self.embedding_model,
+                        input=text
+                    )
+                    embeddings.append(response.data[0].embedding)
+                return embeddings
         except Exception as e:
             print(f"Error generating embeddings: {e}")
             raise
@@ -473,11 +516,17 @@ Return your analysis as a JSON object with this structure:
             Embedding vector
         """
         try:
-            response = self.client.embeddings.create(
-                model=self.embedding_model,
-                input=text
-            )
-            return response.data[0].embedding
+            if self.provider == "aws":
+                # Use AWS Bedrock for embeddings
+                embeddings = self.bedrock_client.generate_embeddings([text])
+                return embeddings[0] if embeddings else []
+            else:
+                # Use Azure OpenAI for embeddings
+                response = self.client.embeddings.create(
+                    model=self.embedding_model,
+                    input=text
+                )
+                return response.data[0].embedding
         except Exception as e:
             print(f"Error generating embedding: {e}")
             raise
@@ -494,27 +543,32 @@ Return your analysis as a JSON object with this structure:
             Similarity score between 0 and 1
         """
         try:
-            # Generate embeddings for both texts
-            embedding1 = self.generate_single_embedding(text1)
-            embedding2 = self.generate_single_embedding(text2)
-            
-            # Calculate cosine similarity
-            import numpy as np
-            
-            # Convert to numpy arrays
-            vec1 = np.array(embedding1)
-            vec2 = np.array(embedding2)
-            
-            # Calculate cosine similarity
-            dot_product = np.dot(vec1, vec2)
-            norm1 = np.linalg.norm(vec1)
-            norm2 = np.linalg.norm(vec2)
-            
-            if norm1 == 0 or norm2 == 0:
-                return 0.0
-            
-            similarity = dot_product / (norm1 * norm2)
-            return float(similarity)
+            if self.provider == "aws":
+                # Use AWS Bedrock similarity calculation
+                return self.bedrock_client.calculate_similarity(text1, text2)
+            else:
+                # Use Azure OpenAI embeddings for similarity
+                # Generate embeddings for both texts
+                embedding1 = self.generate_single_embedding(text1)
+                embedding2 = self.generate_single_embedding(text2)
+                
+                # Calculate cosine similarity
+                import numpy as np
+                
+                # Convert to numpy arrays
+                vec1 = np.array(embedding1)
+                vec2 = np.array(embedding2)
+                
+                # Calculate cosine similarity
+                dot_product = np.dot(vec1, vec2)
+                norm1 = np.linalg.norm(vec1)
+                norm2 = np.linalg.norm(vec2)
+                
+                if norm1 == 0 or norm2 == 0:
+                    return 0.0
+                
+                similarity = dot_product / (norm1 * norm2)
+                return float(similarity)
             
         except Exception as e:
             print(f"Error calculating similarity: {e}")

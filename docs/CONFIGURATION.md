@@ -46,6 +46,13 @@ POSTCODE_DATA_URL=https://api.postcodes.io/
 
 ## GenAI Setup
 
+### Provider Selection
+
+```bash
+# Choose GenAI provider: "azure" or "aws"
+GENAI_PROVIDER=azure  # or "aws" for AWS Bedrock
+```
+
 ### Azure OpenAI Configuration
 
 ```bash
@@ -57,6 +64,23 @@ AZURE_OPENAI_API_VERSION=2024-02-15-preview
 # Model Configuration
 AZURE_OPENAI_MODEL=gpt-4.1-mini
 AZURE_OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+```
+
+### AWS Bedrock Configuration
+
+```bash
+# AWS Bedrock Configuration
+AWS_BEDROCK_REGION=us-east-1
+AWS_BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0
+AWS_BEDROCK_MAX_TOKENS=4000
+AWS_BEDROCK_TEMPERATURE=0.1
+AWS_BEDROCK_TOP_P=0.9
+AWS_BEDROCK_TOP_K=250
+
+# AWS Credentials (set via AWS CLI or environment variables)
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+AWS_SESSION_TOKEN=your_session_token  # Optional for temporary credentials
 ```
 
 ### Getting Azure OpenAI Credentials
@@ -73,6 +97,32 @@ AZURE_OPENAI_EMBEDDING_MODEL=text-embedding-3-large
    - Copy the endpoint URL
    - Generate API key from Keys section
    - Note the resource name
+
+### Getting AWS Bedrock Access
+
+1. **Create AWS Account**
+   - Sign up at [aws.amazon.com](https://aws.amazon.com/)
+
+2. **Enable Bedrock Service**
+   - Go to AWS Bedrock console
+   - Request access to Claude models
+   - Wait for approval (usually instant)
+
+3. **Configure AWS Credentials**
+   ```bash
+   # Option 1: AWS CLI
+   aws configure
+   
+   # Option 2: Environment variables
+   export AWS_ACCESS_KEY_ID=your_access_key
+   export AWS_SECRET_ACCESS_KEY=your_secret_key
+   export AWS_DEFAULT_REGION=us-east-1
+   ```
+
+4. **Verify Access**
+   ```bash
+   aws bedrock list-foundation-models --region us-east-1
+   ```
 
 ### Alternative Models
 

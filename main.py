@@ -8,6 +8,7 @@ and prioritizing interventions for local stakeholders.
 import click
 import json
 import pandas as pd
+from dotenv import load_dotenv
 from src.unified_data_connector import UnifiedDataConnector
 from src.early_warning_system import EarlyWarningSystem
 from src.sentiment_mapping import SentimentMapping
@@ -17,6 +18,9 @@ from src.alert_system import AlertSystem
 from src.genai_text_analyzer import GenAITextAnalyzer
 from src.locality_mapper import LocalityMapper
 from src.data_config import get_data_config
+
+# Load environment variables from .env file
+load_dotenv(override=True)
 
 @click.group()
 def cli():

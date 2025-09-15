@@ -12,6 +12,10 @@ from plotly.subplots import make_subplots
 import folium
 import json
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Try to import streamlit_folium, fallback if not available
 try:
