@@ -136,10 +136,10 @@ python main.py status
 #### MSOA Data Lookup:
 ```bash
 # Lookup by postcode
-python main.py lookup --postcode "SW1A 1AA"
+python main.py msoa lookup --postcode "SW1A 1AA"
 
 # Lookup by MSOA code
-python main.py lookup --msoa-code "E02000001"
+python main.py msoa lookup --msoa-code "E02000001"
 ```
 
 #### GenAI Text Analysis:

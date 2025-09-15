@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass
 from datetime import datetime
 import json
+from .lsoa_msoa_mapper import lsoa_msoa_mapper
 
 @dataclass
 class MSOADataResult:
@@ -65,7 +66,7 @@ class UnifiedDataConnector:
             print(f"❌ Error loading data sources: {e}")
     
     def _load_imd_data(self) -> Optional[pd.DataFrame]:
-        """Load IMD data from Excel file"""
+        """Load IMD data from Excel file and aggregate to MSOA level"""
         try:
             file_path = self.data_config['imd']['file_path']
             if not os.path.exists(file_path):
@@ -86,10 +87,46 @@ class UnifiedDataConnector:
             
             df = df.rename(columns=column_mapping)
             
-            # Extract MSOA code from LSOA code (first 9 characters)
-            df['msoa_code'] = df['lsoa_code'].str[:9]
+            # Load LSOA to MSOA mapping
+            if not lsoa_msoa_mapper.load_mapping_data():
+                print("⚠️ Could not load LSOA-MSOA mapping, using fallback")
             
-            return df
+            # Map LSOA codes to MSOA codes
+            df['msoa_code'] = df['lsoa_code'].apply(
+                lambda lsoa: lsoa_msoa_mapper.lsoa_to_msoa(lsoa)
+            )
+            
+            # Remove rows where MSOA mapping failed
+            original_count = len(df)
+            df = df.dropna(subset=['msoa_code'])
+            mapped_count = len(df)
+            
+            if original_count != mapped_count:
+                print(f"⚠️ Mapped {mapped_count}/{original_count} LSOAs to MSOAs")
+            
+            # Aggregate LSOA data to MSOA level
+            # For IMD decile, we'll use the median (most representative)
+            # For IMD rank, we'll use the average
+            msoa_aggregated = df.groupby('msoa_code').agg({
+                'imd_decile': 'median',  # Use median decile for MSOA
+                'imd_rank': 'mean',      # Use average rank for MSOA
+                'la_code': 'first',      # Take first LA code (should be same for all LSOAs in MSOA)
+                'la_name': 'first',      # Take first LA name
+                'lsoa_code': 'count'     # Count of LSOAs in this MSOA
+            }).reset_index()
+            
+            # Rename columns for clarity
+            msoa_aggregated = msoa_aggregated.rename(columns={
+                'imd_decile': 'msoa_imd_decile',
+                'imd_rank': 'msoa_imd_rank',
+                'lsoa_code': 'lsoa_count'
+            })
+            
+            # Round the rank to integer
+            msoa_aggregated['msoa_imd_rank'] = msoa_aggregated['msoa_imd_rank'].round().astype(int)
+            
+            print(f"✅ IMD data aggregated to {len(msoa_aggregated)} MSOAs")
+            return msoa_aggregated
             
         except Exception as e:
             print(f"❌ Error loading IMD data: {e}")
@@ -169,7 +206,7 @@ class UnifiedDataConnector:
                     error_message="IMD data not loaded"
                 )
             
-            # Filter data for the MSOA
+            # Filter data for the MSOA (now already aggregated)
             msoa_data = self.imd_data[self.imd_data['msoa_code'] == msoa_code]
             
             if msoa_data.empty:
@@ -183,14 +220,15 @@ class UnifiedDataConnector:
                     error_message=f"No IMD data found for MSOA {msoa_code}"
                 )
             
-            # Aggregate data for the MSOA
+            # Extract aggregated data for the MSOA
+            row = msoa_data.iloc[0]
             aggregated_data = {
-                'total_lsoas': len(msoa_data),
-                'imd_rank': msoa_data['imd_rank'].mean(),
-                'imd_decile': msoa_data['imd_decile'].mean(),
-                'la_name': msoa_data['la_name'].iloc[0] if 'la_name' in msoa_data.columns else 'Unknown',
-                'lsoa_codes': msoa_data['lsoa_code'].tolist(),
-                'lsoa_names': msoa_data['lsoa_name'].tolist()
+                'lsoa_count': int(row.get('lsoa_count', 0)),
+                'msoa_imd_rank': int(row.get('msoa_imd_rank', 0)),
+                'msoa_imd_decile': float(row.get('msoa_imd_decile', 0)),
+                'la_code': row.get('la_code', 'Unknown'),
+                'la_name': row.get('la_name', 'Unknown'),
+                'deprivation_level': self._get_deprivation_level(row.get('msoa_imd_decile', 0))
             }
             
             return MSOADataResult(
@@ -439,4 +477,16 @@ class UnifiedDataConnector:
         """Reload all data sources"""
         print("🔄 Reloading data sources...")
         self._load_data_sources()
-        print("✅ Data reload complete")
+    
+    def _get_deprivation_level(self, decile: float) -> str:
+        """Convert IMD decile to deprivation level description"""
+        if decile <= 2:
+            return "Most Deprived"
+        elif decile <= 4:
+            return "Very Deprived"
+        elif decile <= 6:
+            return "Moderately Deprived"
+        elif decile <= 8:
+            return "Less Deprived"
+        else:
+            return "Least Deprived"

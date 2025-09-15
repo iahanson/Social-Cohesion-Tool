@@ -16,7 +16,7 @@ python example.py
 
 ### Individual Component Tests
 ```bash
-python main.py lookup --postcode "SW1A 1AA"
+python main.py msoa lookup --postcode "SW1A 1AA"
 python main.py genai analyze --text "Test text"
 python main.py alerts test
 ```
@@ -308,8 +308,8 @@ python main.py --help
 python main.py genai --help
 
 # 2. Verify file paths
-python main.py lookup --postcode "SW1A 1AA"
-python main.py lookup --msoa-code "E02000001"
+python main.py msoa lookup --postcode "SW1A 1AA"
+python main.py msoa lookup --msoa-code "E02000001"
 
 # 3. Check required parameters
 python main.py genai analyze --text "Required text here"
@@ -429,7 +429,7 @@ python -c "import pandas; print('Pandas works')"
 ```bash
 # Use command line only
 python main.py status
-python main.py lookup --postcode "SW1A 1AA"
+python main.py msoa lookup --postcode "SW1A 1AA"
 python main.py genai analyze --text "Test analysis"
 ```
 

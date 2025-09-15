@@ -19,7 +19,7 @@ Show available commands and options.
 
 ### MSOA Data Commands
 
-#### `python main.py lookup`
+#### `python main.py msoa lookup`
 Look up MSOA data by postcode or MSOA code.
 
 **Options:**
@@ -29,9 +29,9 @@ Look up MSOA data by postcode or MSOA code.
 
 **Examples:**
 ```bash
-python main.py lookup --postcode "SW1A 1AA"
-python main.py lookup --msoa-code "E02000001"
-python main.py lookup --postcode "SW1A 1AA" --output json
+python main.py msoa lookup --postcode "SW1A 1AA"
+python main.py msoa lookup --msoa-code "E02000001"
+python main.py msoa lookup --postcode "SW1A 1AA" --output json
 ```
 
 **Output:**
@@ -39,6 +39,18 @@ python main.py lookup --postcode "SW1A 1AA" --output json
 - IMD data (if available)
 - Good Neighbours trust data (if available)
 - Geographic information
+
+#### `python main.py msoa sources`
+List available data sources.
+
+**Examples:**
+```bash
+python main.py msoa sources
+```
+
+**Output:**
+- List of available data sources
+- Data source descriptions
 
 ### GenAI Text Analysis Commands
 
