@@ -1,11 +1,32 @@
+# Environment variables
 .env
+.env.*
+!.env.example
+!.env.template
+
+# Python
 .venv
-__pycache__
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Data and logs
 data/
 logs/
 results/
+
+# OS
 .DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cache
+.cache/
+.pytest_cache/

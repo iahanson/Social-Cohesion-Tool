@@ -19,6 +19,7 @@ class LSOAMSOAMapper:
         self.msoa_lsoa_mapping = {}
         self.cache_file = "data/lsoa_msoa_mapping.json"
         self.cache_expiry_hours = 24 * 7  # 1 week
+        self.census_lookup_file = "data/Census21 areaLookupTable.xlsx"
         
     def load_mapping_data(self) -> bool:
         """Load LSOA to MSOA mapping data"""
@@ -28,10 +29,16 @@ class LSOAMSOAMapper:
                 print("✅ LSOA-MSOA mapping loaded from cache")
                 return True
             
-            # If cache is stale or doesn't exist, fetch from ONS
+            # Try to load from Census lookup table
+            if self._load_from_census_lookup():
+                self._save_to_cache()
+                print("✅ LSOA-MSOA mapping loaded from Census 2021 lookup table")
+                return True
+            
+            # If Census lookup fails, try ONS API
             if self._fetch_from_ons():
                 self._save_to_cache()
-                print("✅ LSOA-MSOA mapping fetched from ONS")
+                print("✅ LSOA-MSOA mapping fetched from ONS API")
                 return True
             
             # Fallback to built-in mapping for common areas
@@ -121,6 +128,71 @@ class LSOAMSOAMapper:
             
         except Exception as e:
             print(f"⚠️ Could not fetch from ONS: {e}")
+            return False
+    
+    def _load_from_census_lookup(self) -> bool:
+        """Load LSOA to MSOA mapping from Census 2021 lookup table"""
+        try:
+            if not os.path.exists(self.census_lookup_file):
+                print(f"⚠️ Census lookup file not found: {self.census_lookup_file}")
+                return False
+            
+            # Read the Census lookup table
+            df = pd.read_excel(self.census_lookup_file)
+            
+            # Try different possible column names for LSOA and MSOA codes
+            lsoa_col = None
+            msoa_col = None
+            
+            # Common column name variations (including lowercase)
+            lsoa_candidates = ['LSOA21CD', 'lsoa21cd', 'LSOA_CD', 'LSOA_CODE', 'LSOA11CD', 'LSOA_2011_CD']
+            msoa_candidates = ['MSOA21CD', 'msoa21cd', 'MSOA_CD', 'MSOA_CODE', 'MSOA11CD', 'MSOA_2011_CD']
+            
+            for col in df.columns:
+                if col in lsoa_candidates:
+                    lsoa_col = col
+                if col in msoa_candidates:
+                    msoa_col = col
+            
+            if not lsoa_col or not msoa_col:
+                print(f"⚠️ Could not find LSOA/MSOA columns in Census lookup table")
+                print(f"Available columns: {df.columns.tolist()}")
+                print(f"Looking for LSOA columns: {lsoa_candidates}")
+                print(f"Looking for MSOA columns: {msoa_candidates}")
+                return False
+            
+            print(f"Using columns: {lsoa_col} -> {msoa_col}")
+            
+            # Show sample data
+            print(f"Sample data from Census lookup table:")
+            sample_data = df[[lsoa_col, msoa_col]].head(5)
+            print(sample_data)
+            
+            # Build the mapping
+            mapping_count = 0
+            for _, row in df.iterrows():
+                lsoa_code = row[lsoa_col]
+                msoa_code = row[msoa_col]
+                
+                if pd.notna(lsoa_code) and pd.notna(msoa_code):
+                    lsoa_code = str(lsoa_code).strip()
+                    msoa_code = str(msoa_code).strip()
+                    
+                    # Skip empty strings
+                    if lsoa_code and msoa_code:
+                        self.lsoa_msoa_mapping[lsoa_code] = msoa_code
+                        
+                        # Build reverse mapping
+                        if msoa_code not in self.msoa_lsoa_mapping:
+                            self.msoa_lsoa_mapping[msoa_code] = []
+                        self.msoa_lsoa_mapping[msoa_code].append(lsoa_code)
+                        mapping_count += 1
+            
+            print(f"✅ Processed {mapping_count} LSOA-MSOA mappings from Census lookup table")
+            return len(self.lsoa_msoa_mapping) > 0
+            
+        except Exception as e:
+            print(f"❌ Error loading from Census lookup table: {e}")
             return False
     
     def _load_fallback_mapping(self):
