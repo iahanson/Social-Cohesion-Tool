@@ -490,3 +490,38 @@ class UnifiedDataConnector:
             return "Less Deprived"
         else:
             return "Least Deprived"
+    
+    def load_good_neighbours_data(self) -> Optional[pd.DataFrame]:
+        """Load Good Neighbours data (public method for dashboard compatibility)"""
+        return self.good_neighbours_data
+    
+    def get_good_neighbours_summary(self) -> Optional[Dict[str, Any]]:
+        """Get Good Neighbours data summary (public method for dashboard compatibility)"""
+        if self.good_neighbours_data is None:
+            return None
+        
+        try:
+            # Calculate trust distribution
+            positive_trust = len(self.good_neighbours_data[self.good_neighbours_data['net_trust'] > 0])
+            negative_trust = len(self.good_neighbours_data[self.good_neighbours_data['net_trust'] < 0])
+            neutral_trust = len(self.good_neighbours_data[self.good_neighbours_data['net_trust'] == 0])
+            
+            summary = {
+                'total_msoas': len(self.good_neighbours_data),
+                'average_net_trust': self.good_neighbours_data['net_trust'].mean(),  # Dashboard expects this key
+                'avg_net_trust': self.good_neighbours_data['net_trust'].mean(),  # Keep for compatibility
+                'min_net_trust': self.good_neighbours_data['net_trust'].min(),
+                'max_net_trust': self.good_neighbours_data['net_trust'].max(),
+                'std_net_trust': self.good_neighbours_data['net_trust'].std(),
+                'avg_always_usually_trust': self.good_neighbours_data['always_usually_trust'].mean(),
+                'avg_usually_almost_always_careful': self.good_neighbours_data['usually_almost_always_careful'].mean(),
+                'net_trust_distribution': {  # Dashboard expects this structure
+                    'positive_trust': positive_trust,
+                    'negative_trust': negative_trust,
+                    'neutral_trust': neutral_trust
+                }
+            }
+            return summary
+        except Exception as e:
+            print(f"❌ Error creating Good Neighbours summary: {e}")
+            return None

@@ -146,8 +146,8 @@ def dashboard_overview():
         int_data = st.session_state.intervention_tool.run_full_analysis()
         
         # Good Neighbours social trust data
-        gn_data = st.session_state.good_neighbours_connector.load_social_trust_data()
-        gn_summary = st.session_state.good_neighbours_connector.get_social_trust_summary()
+        gn_data = st.session_state.unified_data_connector.load_good_neighbours_data()
+        gn_summary = st.session_state.unified_data_connector.get_good_neighbours_summary()
     
     # Key metrics
     col1, col2, col3, col4, col5, col6 = st.columns(6)
@@ -926,8 +926,8 @@ def good_neighbours_page():
                     st.error("Failed to load lowest trust areas")
             
             elif analysis_type == "Trust Distribution":
-                df = connector.load_social_trust_data()
-                summary = connector.get_social_trust_summary()
+                df = connector.load_good_neighbours_data()
+                summary = connector.get_good_neighbours_summary()
                 
                 if df is not None and summary is not None:
                     st.subheader("Trust Score Distribution Analysis")
