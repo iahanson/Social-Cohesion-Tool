@@ -12,44 +12,185 @@ from sklearn.decomposition import PCA
 from typing import Dict, List, Tuple, Optional
 import warnings
 from .data_config import get_data_config, use_real_data, use_dummy_data
+from .unified_data_connector import UnifiedDataConnector
 warnings.filterwarnings('ignore')
 
 class EarlyWarningSystem:
     """Early warning system for detecting social tension hotspots"""
     
-    def __init__(self):
+    def __init__(self, data_connector=None):
         self.data_config = get_data_config()
+        self.data_connector = data_connector  # Use shared data connector if provided
         self.scaler = StandardScaler()
         self.anomaly_detector = IsolationForest(contamination=0.1, random_state=42)
         self.clusterer = DBSCAN(eps=0.5, min_samples=5)
         self.pca = PCA(n_components=0.95)
         self.risk_threshold = 0.7
         
-    def load_data(self, n_areas: int = 100) -> pd.DataFrame:
+    def load_data(self, n_areas: int = 100, use_real: bool = True) -> pd.DataFrame:
         """
         Load data from configured sources (real or dummy)
         
         Args:
             n_areas: Number of areas to generate (for dummy data)
+            use_real: Whether to use real data (default: True)
             
         Returns:
             DataFrame with social tension indicators
         """
-        # Check if we should use real data
-        if use_real_data('community_life_survey') or use_real_data('crime_data'):
+        if use_real:
             return self._load_real_data()
         else:
-            print("Using sample data for early warning system (configured for dummy data)")
+            print("Using sample data for early warning system")
             return self.generate_sample_data(n_areas)
     
     def _load_real_data(self) -> pd.DataFrame:
         """
         Load real data from configured sources
-        This would integrate with actual data connectors
+        Integrates with UnifiedDataConnector for real MSOA data
         """
-        # TODO: Implement real data loading when connectors are available
-        print("Real data loading not yet implemented - using sample data")
-        return self.generate_sample_data(100)
+        print("🔄 Loading real data for early warning system...")
+        
+        # Use shared data connector or create new one if not provided
+        if self.data_connector is None:
+            self.data_connector = UnifiedDataConnector(auto_load=True)
+        else:
+            # Ensure data is loaded in shared connector
+            if self.data_connector.msoa_population_data is None:
+                self.data_connector._load_data_sources()
+        
+        # Get population data (MSOA-level aggregated data)
+        population_data = self.data_connector.msoa_population_data
+        if population_data is None:
+            print("❌ No population data available")
+            return self.generate_sample_data(100)
+        
+        # Get Good Neighbours data (social trust)
+        good_neighbours_data = self.data_connector.good_neighbours_data
+        if good_neighbours_data is None:
+            print("❌ No Good Neighbours data available")
+            return self.generate_sample_data(100)
+        
+        # Get IMD data (MSOA-level aggregated data)
+        imd_data = self.data_connector.imd_data
+        if imd_data is None:
+            print("❌ No IMD data available")
+            return self.generate_sample_data(100)
+        
+        # Combine data sources
+        combined_data = self._combine_real_data_sources(population_data, good_neighbours_data, imd_data)
+        
+        print(f"✅ Loaded real data for {len(combined_data)} MSOAs")
+        return combined_data
+    
+    def _combine_real_data_sources(self, population_data: pd.DataFrame, good_neighbours_data: pd.DataFrame, imd_data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Combine real data sources into a unified dataset for early warning analysis
+        
+        Args:
+            population_data: MSOA-level population data
+            good_neighbours_data: MSOA-level social trust data
+            imd_data: MSOA-level deprivation data
+            
+        Returns:
+            Combined DataFrame with all indicators
+        """
+        # Start with population data as base
+        combined = population_data.copy()
+        
+        # Add social trust indicators from Good Neighbours data
+        if good_neighbours_data is not None:
+            # Merge on MSOA code (using the renamed columns)
+            combined = combined.merge(
+                good_neighbours_data[['msoa_code', 'msoa_name', 'net_trust']], 
+                on='msoa_code', 
+                how='left',
+                suffixes=('', '_gn')
+            )
+            
+            # Rename net_trust to social_trust_score for consistency
+            combined = combined.rename(columns={
+                'net_trust': 'social_trust_score'
+            })
+        
+        # Add deprivation indicators from IMD data
+        if imd_data is not None:
+            # Merge on MSOA code (using the renamed columns)
+            combined = combined.merge(
+                imd_data[['msoa_code', 'msoa_imd_decile', 'msoa_imd_rank']], 
+                on='msoa_code', 
+                how='left',
+                suffixes=('', '_imd')
+            )
+            
+            # Create deprivation-based indicators
+            combined['deprivation_level'] = combined['msoa_imd_decile'].apply(self._get_deprivation_level)
+            combined['economic_uncertainty'] = (11 - combined['msoa_imd_decile']) * 0.5  # Higher decile = lower uncertainty
+            combined['housing_stress'] = (11 - combined['msoa_imd_decile']) * 8  # Higher decile = lower stress
+        
+        # Create additional indicators from population data
+        if 'total_population' in combined.columns:
+            # Population density proxy (using total population as proxy)
+            combined['population_density'] = combined['total_population']
+            
+            # Age-based indicators
+            age_columns = [col for col in combined.columns if col.startswith(('F', 'M')) and col[1:].isdigit()]
+            if age_columns:
+                # Calculate youth population (0-24)
+                youth_cols = [col for col in age_columns if int(col[1:]) <= 24]
+                if youth_cols:
+                    combined['youth_population'] = combined[youth_cols].sum(axis=1)
+                    combined['youth_ratio'] = combined['youth_population'] / combined['total_population']
+                
+                # Calculate elderly population (65+)
+                elderly_cols = [col for col in age_columns if int(col[1:]) >= 65]
+                if elderly_cols:
+                    combined['elderly_population'] = combined[elderly_cols].sum(axis=1)
+                    combined['elderly_ratio'] = combined['elderly_population'] / combined['total_population']
+        
+        # Fill missing values with reasonable defaults
+        combined['social_trust_score'] = combined['social_trust_score'].fillna(0)  # Neutral trust
+        combined['economic_uncertainty'] = combined['economic_uncertainty'].fillna(5)  # Medium uncertainty
+        combined['housing_stress'] = combined['housing_stress'].fillna(50)  # Medium stress
+        
+        # Create synthetic indicators based on real data
+        combined['community_cohesion'] = combined['social_trust_score'] + np.random.normal(0, 0.5, len(combined))
+        combined['volunteer_rate'] = np.random.beta(3, 7, len(combined)) * 30  # 0-30%
+        combined['education_attainment'] = (11 - combined['msoa_imd_decile']) * 6 + np.random.normal(0, 5, len(combined))  # Higher decile = higher attainment
+        combined['community_events'] = np.random.poisson(5, len(combined))
+        
+        # Create crime rate proxy based on deprivation
+        combined['crime_rate'] = (11 - combined['msoa_imd_decile']) * 10 + np.random.gamma(2, 5, len(combined))
+        
+        # Create unemployment rate proxy based on deprivation
+        combined['unemployment_rate'] = (11 - combined['msoa_imd_decile']) * 2 + np.random.beta(2, 8, len(combined)) * 5
+        
+        # Create sentiment score based on trust and deprivation
+        combined['sentiment_score'] = combined['social_trust_score'] - (11 - combined['msoa_imd_decile']) * 0.3 + np.random.normal(0, 0.5, len(combined))
+        
+        # Create negative sentiment ratio
+        combined['negative_sentiment_ratio'] = np.maximum(0, -combined['sentiment_score'] / 3)
+        combined['negative_sentiment_ratio'] = np.minimum(1, combined['negative_sentiment_ratio'])
+        
+        # Add local authority information (extract from MSOA name or use default)
+        combined['local_authority'] = combined['msoa_name'].str.extract(r'(\w+)')[0].fillna('Unknown')
+        
+        return combined
+    
+    def _get_deprivation_level(self, decile: float) -> str:
+        """Convert IMD decile to deprivation level"""
+        if pd.isna(decile):
+            return 'Unknown'
+        elif decile <= 2:
+            return 'Most Deprived'
+        elif decile <= 4:
+            return 'Deprived'
+        elif decile <= 6:
+            return 'Average'
+        elif decile <= 8:
+            return 'Less Deprived'
+        else:
+            return 'Least Deprived'
     
     def generate_sample_data(self, n_areas: int = 100) -> pd.DataFrame:
         """

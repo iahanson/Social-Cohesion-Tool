@@ -53,10 +53,10 @@ class DataConfig:
             ),
             'community_life_survey': DataSourceConfig(
                 enabled=True,
-                use_real_data=False,
+                use_real_data=True,  # Enable real Community Life Survey data
                 fallback_to_dummy=True,
                 data_url="https://www.gov.uk/government/statistics/community-life-survey-2020-21",
-                local_file_path="data/community_life_survey.xlsx"
+                local_file_path="data/Community_Life_Survey_2023_24_cleaned.xlsx"
             ),
             'crime_data': DataSourceConfig(
                 enabled=True,

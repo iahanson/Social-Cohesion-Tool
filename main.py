@@ -856,5 +856,394 @@ def status():
     
     click.echo(f"\nUse 'python main.py data status' for detailed data source information")
 
+@cli.group()
+def population():
+    """Population data analysis commands"""
+    pass
+
+@population.command()
+@click.option('--msoa-code', help='MSOA code to get population data for')
+@click.option('--summary', is_flag=True, help='Show overall population summary')
+@click.option('--top', type=int, default=10, help='Show top N most populated MSOAs')
+def analyze(msoa_code, summary, top):
+    """Analyze population data"""
+    connector = UnifiedDataConnector()
+    
+    if summary:
+        click.echo("📊 Population Summary")
+        click.echo("=" * 50)
+        summary_data = connector.get_population_summary()
+        
+        if summary_data:
+            click.echo(f"Total Population: {summary_data.get('total_population', 0):,}")
+            click.echo(f"Total MSOAs: {summary_data.get('total_msoas', 0)}")
+            click.echo(f"Average Population per MSOA: {summary_data.get('average_population_per_msoa', 0):.0f}")
+            click.echo(f"Min Population: {summary_data.get('min_population', 0):,}")
+            click.echo(f"Max Population: {summary_data.get('max_population', 0):,}")
+            
+            age_groups = summary_data.get('age_groups', {})
+            if age_groups:
+                click.echo(f"\nAge Group Distribution:")
+                for age_group, count in age_groups.items():
+                    percentage = (count / summary_data.get('total_population', 1)) * 100
+                    click.echo(f"  {age_group}: {count:,} ({percentage:.1f}%)")
+        else:
+            click.echo("❌ No population data available")
+    
+    elif msoa_code:
+        click.echo(f"👥 Population Data for MSOA: {msoa_code}")
+        click.echo("=" * 50)
+        
+        pop_data = connector.get_population_data(msoa_code)
+        if pop_data:
+            click.echo(f"MSOA Name: {pop_data.get('msoa_name', 'Unknown')}")
+            click.echo(f"Total Population: {pop_data.get('total_population', 0):,}")
+            
+            # Demographic analysis
+            demo_analysis = connector.get_demographic_analysis(msoa_code)
+            if demo_analysis:
+                gender = demo_analysis.get('gender_distribution', {})
+                click.echo(f"Gender Distribution:")
+                click.echo(f"  Female: {gender.get('female', 0):,} ({gender.get('female_percentage', 0):.1f}%)")
+                click.echo(f"  Male: {gender.get('male', 0):,} ({gender.get('male_percentage', 0):.1f}%)")
+                
+                age_groups = demo_analysis.get('age_groups', {})
+                if age_groups:
+                    click.echo(f"\nAge Group Distribution:")
+                    for age_group, count in age_groups.items():
+                        percentage = (count / pop_data.get('total_population', 1)) * 100
+                        click.echo(f"  {age_group}: {count:,} ({percentage:.1f}%)")
+        else:
+            click.echo("❌ No population data found for this MSOA")
+    
+    else:
+        # Show top populated MSOAs
+        click.echo(f"🏆 Top {top} Most Populated MSOAs")
+        click.echo("=" * 50)
+        
+        top_msoas = connector.get_top_populated_msoas(top)
+        if top_msoas:
+            for msoa in top_msoas:
+                click.echo(f"{msoa['rank']:2d}. {msoa['msoa_name']} ({msoa['msoa_code']})")
+                click.echo(f"    Population: {msoa['total_population']:,}")
+        else:
+            click.echo("❌ No population data available")
+
+@population.command()
+def refresh_cache():
+    """Refresh the population data cache"""
+    click.echo("🔄 Refreshing population data cache...")
+    
+    # Create connector without auto-loading data
+    connector = UnifiedDataConnector(auto_load=False)
+    
+    # Force refresh the cache
+    connector.refresh_population_cache()
+
+@cli.group()
+def early_warning():
+    """Early warning system commands"""
+    pass
+
+@early_warning.command()
+@click.option('--use-real', is_flag=True, default=True, help='Use real data (default: True)')
+@click.option('--use-dummy', is_flag=True, help='Use dummy data instead of real data')
+@click.option('--output', help='Output file for results (JSON format)')
+def analyze(use_real, use_dummy, output):
+    """Run early warning analysis"""
+    from src.early_warning_system import EarlyWarningSystem
+    
+    click.echo("🚨 Early Warning System Analysis")
+    click.echo("=" * 50)
+    
+    # Determine data source
+    use_real_data = use_real and not use_dummy
+    
+    # Initialize early warning system
+    ews = EarlyWarningSystem()
+    
+    # Load data
+    click.echo(f"📊 Loading {'real' if use_real_data else 'dummy'} data...")
+    data = ews.load_data(use_real=use_real_data)
+    
+    # Run full analysis
+    click.echo("🔄 Running analysis...")
+    results = ews.run_full_analysis(data)
+    
+    # Display summary
+    summary = results['summary']
+    click.echo(f"\n📈 Analysis Summary:")
+    click.echo(f"Total Areas Analyzed: {summary['total_areas']}")
+    click.echo(f"Critical Risk Areas: {summary['critical_risk_areas']}")
+    click.echo(f"High Risk Areas: {summary['high_risk_areas']}")
+    click.echo(f"Anomalous Areas: {summary['anomalous_areas']}")
+    click.echo(f"Total Alerts: {summary['total_alerts']}")
+    click.echo(f"Average Risk Score: {summary['average_risk_score']:.3f}")
+    
+    # Display risk distribution
+    click.echo(f"\n📊 Risk Distribution:")
+    for risk_level, count in summary['risk_distribution'].items():
+        click.echo(f"  {risk_level}: {count}")
+    
+    # Display top alerts
+    alerts = results['alerts']
+    if alerts:
+        click.echo(f"\n🚨 Top Alerts:")
+        for i, alert in enumerate(alerts[:5], 1):
+            click.echo(f"{i}. {alert['message']} (Priority: {alert['priority']})")
+    
+    # Save results if output file specified
+    if output:
+        import json
+        # Convert DataFrame to dict for JSON serialization
+        results_copy = results.copy()
+        results_copy['data'] = results['data'].to_dict('records')
+        
+        with open(output, 'w') as f:
+            json.dump(results_copy, f, indent=2, default=str)
+        click.echo(f"\n💾 Results saved to {output}")
+
+@early_warning.command()
+@click.argument('msoa_code')
+def risk_factors(msoa_code):
+    """Get detailed risk factors for a specific MSOA"""
+    from src.early_warning_system import EarlyWarningSystem
+    
+    click.echo(f"🔍 Risk Factors Analysis for MSOA: {msoa_code}")
+    click.echo("=" * 50)
+    
+    # Initialize early warning system
+    ews = EarlyWarningSystem()
+    
+    # Load data and run analysis
+    data = ews.load_data(use_real=True)
+    results = ews.run_full_analysis(data)
+    
+    # Get risk factors for specific MSOA
+    risk_factors = ews.get_risk_factors(results['data'], msoa_code)
+    
+    if 'error' in risk_factors:
+        click.echo(f"❌ {risk_factors['error']}")
+        return
+    
+    # Display results
+    click.echo(f"MSOA Code: {risk_factors['msoa_code']}")
+    click.echo(f"Local Authority: {risk_factors['local_authority']}")
+    click.echo(f"Overall Risk Score: {risk_factors['overall_risk_score']:.3f}")
+    click.echo(f"Risk Level: {risk_factors['risk_level']}")
+    
+    click.echo(f"\n🚨 Top Risk Factors:")
+    for factor, score in risk_factors['top_risk_factors']:
+        click.echo(f"  {factor}: {score:.3f}")
+    
+    click.echo(f"\n🛡️ Protective Factors:")
+    for factor, score in risk_factors['protective_factors']:
+        click.echo(f"  {factor}: {score:.3f}")
+    
+    click.echo(f"\n💡 Recommendations:")
+    for rec in risk_factors['recommendations']:
+        click.echo(f"  • {rec}")
+
+@cli.group()
+def community_survey():
+    """Community Life Survey commands"""
+    pass
+
+@community_survey.command()
+def analyze():
+    """Analyze Community Life Survey data structure"""
+    from src.community_life_survey_connector import CommunityLifeSurveyConnector
+    
+    click.echo("📊 Community Life Survey Analysis")
+    click.echo("=" * 50)
+    
+    connector = CommunityLifeSurveyConnector()
+    
+    # Load all sheets
+    click.echo("🔄 Loading all sheets...")
+    sheets = connector.load_all_sheets()
+    
+    if not sheets:
+        click.echo("❌ No sheets could be loaded")
+        return
+    
+    # Analyze first few sheets
+    click.echo(f"\n🔍 Analyzing first 3 sheets:")
+    for i, sheet_name in enumerate(list(sheets.keys())[:3]):
+        click.echo(f"\nSheet {i+1}: {sheet_name}")
+        analysis = connector.analyze_sheet_structure(sheet_name)
+        click.echo(f"  Data start row: {analysis.get('data_start_row', 'Not found')}")
+        click.echo(f"  Question: {analysis.get('question', 'Not found')}")
+        click.echo(f"  Sample LADs: {analysis.get('sample_lads', [])[:3]}")
+
+@community_survey.command()
+def process():
+    """Process all Community Life Survey sheets"""
+    from src.community_life_survey_connector import CommunityLifeSurveyConnector
+    
+    click.echo("🔄 Processing Community Life Survey Data")
+    click.echo("=" * 50)
+    
+    connector = CommunityLifeSurveyConnector()
+    
+    # Process all sheets
+    click.echo("📊 Processing all sheets...")
+    processed_data = connector.process_all_sheets()
+    
+    if processed_data.empty:
+        click.echo("❌ No data could be processed")
+        return
+    
+    # Get summary
+    summary = connector.get_question_summary()
+    click.echo(f"\n📈 Processing Summary:")
+    click.echo(f"  Total questions: {summary.get('total_questions', 0)}")
+    click.echo(f"  Total sheets: {summary.get('total_sheets', 0)}")
+    click.echo(f"  Total responses: {summary.get('total_responses', 0)}")
+    
+    # Export processed data
+    click.echo("\n💾 Exporting processed data...")
+    connector.export_processed_data()
+    
+    click.echo("✅ Community Life Survey data processing complete!")
+
+@community_survey.command()
+@click.argument('lad_name')
+def lad_data(lad_name):
+    """Get all data for a specific Local Authority District"""
+    from src.community_life_survey_connector import CommunityLifeSurveyConnector
+    
+    click.echo(f"🏛️ Community Life Survey Data for: {lad_name}")
+    click.echo("=" * 50)
+    
+    connector = CommunityLifeSurveyConnector()
+    
+    # Load and process data
+    connector.load_all_sheets()
+    processed_data = connector.process_all_sheets()
+    
+    if processed_data.empty:
+        click.echo("❌ No data available")
+        return
+    
+    # Get LAD data
+    lad_data = connector.get_lad_data(lad_name)
+    
+    if lad_data.empty:
+        click.echo(f"❌ No data found for LAD: {lad_name}")
+        click.echo("Available LADs:")
+        available_lads = processed_data.iloc[:, 1].dropna().unique()[:10]
+        for lad in available_lads:
+            click.echo(f"  • {lad}")
+        return
+    
+    click.echo(f"📊 Found {len(lad_data)} responses for {lad_name}")
+    
+    # Show sample data
+    click.echo(f"\nSample data:")
+    for i, (_, row) in enumerate(lad_data.head(5).iterrows()):
+        question = row.get('question', 'Unknown')
+        click.echo(f"  {i+1}. {question}")
+
+@cli.group()
+def survey():
+    """Community Life Survey commands"""
+    pass
+
+@survey.command()
+def summary():
+    """Get Community Life Survey summary"""
+    from src.unified_data_connector import UnifiedDataConnector
+    
+    click.echo("📋 Community Life Survey Summary")
+    click.echo("=" * 50)
+    
+    connector = UnifiedDataConnector()
+    summary = connector.get_community_survey_summary()
+    
+    if not summary:
+        click.echo("❌ No Community Life Survey data available")
+        return
+    
+    click.echo(f"Total Questions: {summary.get('total_questions', 0)}")
+    click.echo(f"Total Sheets: {summary.get('total_sheets', 0)}")
+    click.echo(f"Total Responses: {summary.get('total_responses', 0)}")
+    click.echo(f"Unique Local Authorities: {summary.get('unique_lads', 0)}")
+
+@survey.command()
+@click.argument('lad_name')
+def lad_data(lad_name):
+    """Get Community Life Survey data for a specific LAD"""
+    from src.unified_data_connector import UnifiedDataConnector
+    
+    click.echo(f"🏛️ Community Life Survey Data for: {lad_name}")
+    click.echo("=" * 50)
+    
+    connector = UnifiedDataConnector()
+    lad_data = connector.get_lad_survey_data(lad_name)
+    
+    if lad_data.empty:
+        click.echo(f"❌ No data found for LAD: {lad_name}")
+        return
+    
+    click.echo(f"📊 Found {len(lad_data)} responses for {lad_name}")
+    
+    # Show sample data
+    click.echo(f"\nSample questions:")
+    for i, (_, row) in enumerate(lad_data.head(5).iterrows()):
+        question = row.get('question', 'Unknown')
+        click.echo(f"  {i+1}. {question}")
+
+@survey.command()
+@click.argument('question')
+def question_data(question):
+    """Get Community Life Survey data for a specific question"""
+    from src.unified_data_connector import UnifiedDataConnector
+    
+    click.echo(f"❓ Community Life Survey Data for Question: {question}")
+    click.echo("=" * 50)
+    
+    connector = UnifiedDataConnector()
+    question_data = connector.get_survey_question_data(question)
+    
+    if question_data.empty:
+        click.echo(f"❌ No data found for question: {question}")
+        return
+    
+    click.echo(f"📊 Found {len(question_data)} responses for this question")
+    
+    # Show sample LADs
+    lad_column = question_data.columns[1]  # Column B should be LAD names
+    sample_lads = question_data[lad_column].head(10).tolist()
+    click.echo(f"\nSample Local Authorities:")
+    for i, lad in enumerate(sample_lads, 1):
+        click.echo(f"  {i}. {lad}")
+
+@survey.command()
+def clean():
+    """Clean Community Life Survey data by removing header rows"""
+    import subprocess
+    import sys
+    
+    click.echo("🧹 Cleaning Community Life Survey Data")
+    click.echo("=" * 50)
+    
+    try:
+        # Run the cleaning script
+        result = subprocess.run([sys.executable, "clean_community_survey.py"], 
+                              capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            click.echo("✅ Data cleaning completed successfully!")
+            click.echo("\nOutput:")
+            click.echo(result.stdout)
+        else:
+            click.echo("❌ Data cleaning failed!")
+            click.echo("\nError:")
+            click.echo(result.stderr)
+            
+    except Exception as e:
+        click.echo(f"❌ Error running cleaning script: {e}")
+
 if __name__ == '__main__':
     cli()

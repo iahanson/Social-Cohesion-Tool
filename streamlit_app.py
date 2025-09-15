@@ -73,19 +73,20 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
+# Initialize session state with shared data connector
+if 'unified_data_connector' not in st.session_state:
+    st.session_state.unified_data_connector = UnifiedDataConnector()
+
 if 'early_warning_system' not in st.session_state:
-    st.session_state.early_warning_system = EarlyWarningSystem()
+    st.session_state.early_warning_system = EarlyWarningSystem(st.session_state.unified_data_connector)
 if 'sentiment_mapping' not in st.session_state:
-    st.session_state.sentiment_mapping = SentimentMapping()
+    st.session_state.sentiment_mapping = SentimentMapping(st.session_state.unified_data_connector)
 if 'intervention_tool' not in st.session_state:
     st.session_state.intervention_tool = InterventionTool()
 if 'engagement_simulator' not in st.session_state:
     st.session_state.engagement_simulator = EngagementSimulator()
 if 'alert_system' not in st.session_state:
     st.session_state.alert_system = AlertSystem()
-if 'unified_data_connector' not in st.session_state:
-    st.session_state.unified_data_connector = UnifiedDataConnector()
 
 def main():
     """Main application function"""
@@ -102,6 +103,7 @@ def main():
             "🚨 Early Warning System",
             "🗺️ Sentiment & Trust Mapping",
             "🤝 Good Neighbours Trust Data",
+            "📋 Community Life Survey",
             "💡 Intervention Recommendations",
             "🎯 Engagement Simulator",
             "📧 Alert Management",
@@ -119,6 +121,8 @@ def main():
         sentiment_mapping_page()
     elif page == "🤝 Good Neighbours Trust Data":
         good_neighbours_page()
+    elif page == "📋 Community Life Survey":
+        community_survey_page()
     elif page == "💡 Intervention Recommendations":
         intervention_page()
     elif page == "🎯 Engagement Simulator":
@@ -227,7 +231,6 @@ def dashboard_overview():
             x='deprivation_composite',
             y='social_trust_composite',
             color='local_authority',
-            size='population',
             hover_data=['msoa_name', 'msoa_code'],
             title="Social Trust vs Deprivation by Local Authority"
         )
@@ -524,7 +527,6 @@ def sentiment_mapping_page():
                             x='longitude',
                             y='latitude',
                             color='social_trust_composite',
-                            size='population',
                             hover_data=['msoa_name', 'msoa_code', 'local_authority'],
                             title="Social Trust Map (Static View)",
                             color_continuous_scale='RdYlGn'
@@ -538,7 +540,6 @@ def sentiment_mapping_page():
                         x='longitude',
                         y='latitude',
                         color='social_trust_composite',
-                        size='population',
                         hover_data=['msoa_name', 'msoa_code', 'local_authority'],
                         title="Social Trust Map (Alternative View)",
                         color_continuous_scale='RdYlGn'
@@ -566,7 +567,6 @@ def sentiment_mapping_page():
                         lat='latitude',
                         lon='longitude',
                         color='community_cohesion_composite',
-                        size='population',
                         hover_data=['msoa_name', 'msoa_code', 'local_authority'],
                         color_continuous_scale='RdYlGn',
                         mapbox_style='carto-positron',
@@ -591,7 +591,6 @@ def sentiment_mapping_page():
                         x='longitude',
                         y='latitude',
                         color='community_cohesion_composite',
-                        size='population',
                         hover_data=['msoa_name', 'msoa_code', 'local_authority'],
                         title="Community Cohesion Map (Alternative View)",
                         color_continuous_scale='RdYlGn'
@@ -634,7 +633,6 @@ def sentiment_mapping_page():
                         lat='latitude',
                         lon='longitude',
                         color='sentiment_composite',
-                        size='population',
                         hover_data=['msoa_name', 'msoa_code', 'local_authority'],
                         color_continuous_scale='RdYlGn',
                         mapbox_style='carto-positron',
@@ -659,7 +657,6 @@ def sentiment_mapping_page():
                         x='longitude',
                         y='latitude',
                         color='sentiment_composite',
-                        size='population',
                         hover_data=['msoa_name', 'msoa_code', 'local_authority'],
                         title="Sentiment Map (Alternative View)",
                         color_continuous_scale='RdYlGn'
@@ -724,7 +721,6 @@ def sentiment_mapping_page():
                         x='social_trust_composite',
                         y='community_cohesion_composite',
                         color='local_authority',
-                        size='population',
                         hover_data=['msoa_name', 'msoa_code'],
                         title="Community Cohesion vs Social Trust",
                         labels={
@@ -787,7 +783,7 @@ def good_neighbours_page():
                 # Load data and show summary
                 if connector.good_neighbours_data is not None:
                     df = connector.good_neighbours_data
-                    summary = connector.get_data_summary()
+                    summary = connector.get_good_neighbours_summary()
                     
                     if df is not None and summary is not None:
                         st.subheader("📊 Data Overview")
@@ -933,9 +929,9 @@ def good_neighbours_page():
                     st.subheader("Trust Score Distribution Analysis")
                     
                     # Decile analysis
-                    df['trust_decile'] = pd.qcut(df['Net_trust'], q=10, labels=False, duplicates='drop') + 1
+                    df['trust_decile'] = pd.qcut(df['net_trust'], q=10, labels=False, duplicates='drop') + 1
                     
-                    decile_stats = df.groupby('trust_decile')['Net_trust'].agg(['count', 'mean', 'min', 'max']).reset_index()
+                    decile_stats = df.groupby('trust_decile')['net_trust'].agg(['count', 'mean', 'min', 'max']).reset_index()
                     decile_stats.columns = ['Decile', 'Count', 'Mean Trust', 'Min Trust', 'Max Trust']
                     
                     st.subheader("Trust Score Deciles")
@@ -956,15 +952,15 @@ def good_neighbours_page():
                     # Trust vs caution scatter
                     fig = px.scatter(
                         df,
-                        x='always_trust OR usually_trust',
-                        y='usually_careful OR almost_always_careful',
-                        color='Net_trust',
-                        hover_data=['MSOA_name', 'MSOA_code'],
+                        x='always_usually_trust',
+                        y='usually_almost_always_careful',
+                        color='net_trust',
+                        hover_data=['msoa_name', 'msoa_code'],
                         title="Trust vs Caution Relationship",
                         color_continuous_scale='RdYlGn',
                         labels={
-                            'always_trust OR usually_trust': 'Always/Usually Trust (%)',
-                            'usually_careful OR almost_always_careful': 'Usually/Almost Always Careful (%)'
+                            'always_usually_trust': 'Always/Usually Trust (%)',
+                            'usually_almost_always_careful': 'Usually/Almost Always Careful (%)'
                         }
                     )
                     st.plotly_chart(fig, use_container_width=True)
@@ -1913,6 +1909,170 @@ def genai_text_analysis_page():
             st.metric("Local Authorities", len(mapper.get_local_authorities()))
         with col3:
             st.metric("Issue Categories", len(analyzer.issue_categories))
+
+def community_survey_page():
+    """Community Life Survey data analysis page"""
+    st.title("📋 Community Life Survey Analysis")
+    st.markdown("Analyze community engagement and social cohesion data from the Community Life Survey")
+    
+    # Get data connector
+    connector = st.session_state.unified_data_connector
+    
+    # Check if Community Life Survey data is available
+    survey_data = connector.get_community_survey_data()
+    if survey_data is None or survey_data.empty:
+        st.error("❌ Community Life Survey data is not available. Please ensure the data file is loaded.")
+        return
+    
+    # Get summary
+    summary = connector.get_community_survey_summary()
+    
+    # Display summary metrics
+    st.subheader("📊 Survey Overview")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Questions", summary.get('total_questions', 0))
+    with col2:
+        st.metric("Total Sheets", summary.get('total_sheets', 0))
+    with col3:
+        st.metric("Total Responses", summary.get('total_responses', 0))
+    with col4:
+        st.metric("Local Authorities", summary.get('unique_lads', 0))
+    
+    # Sidebar filters
+    st.sidebar.subheader("🔍 Filter Options")
+    
+    # Question filter
+    top_questions = connector.get_top_survey_questions(20)
+    question_options = ["All Questions"] + [q['question'] for q in top_questions]
+    selected_question = st.sidebar.selectbox("Select Question", question_options)
+    
+    # LAD filter
+    lad_column = survey_data.columns[1]  # Column B should be LAD names
+    unique_lads = sorted(survey_data[lad_column].dropna().unique())
+    lad_options = ["All Local Authorities"] + unique_lads
+    selected_lad = st.sidebar.selectbox("Select Local Authority", lad_options)
+    
+    # Filter data based on selections
+    filtered_data = survey_data.copy()
+    
+    if selected_question != "All Questions":
+        filtered_data = filtered_data[filtered_data['question'] == selected_question]
+    
+    if selected_lad != "All Local Authorities":
+        filtered_data = filtered_data[filtered_data[lad_column] == selected_lad]
+    
+    # Display filtered results
+    st.subheader("📈 Analysis Results")
+    
+    if filtered_data.empty:
+        st.warning("No data matches the selected filters.")
+        return
+    
+    # Show data table
+    st.subheader("📋 Survey Data")
+    
+    # Prepare display data
+    display_data = filtered_data.copy()
+    
+    # Show only relevant columns for display
+    display_columns = [lad_column, 'question'] + [col for col in display_data.columns if col not in [lad_column, 'question', 'sheet_name']]
+    display_data = display_data[display_columns]
+    
+    st.dataframe(display_data, use_container_width=True)
+    
+    # Question analysis
+    if selected_question == "All Questions":
+        st.subheader("📊 Question Analysis")
+        
+        # Top questions chart
+        question_counts = filtered_data['question'].value_counts().head(10)
+        
+        fig = px.bar(
+            x=question_counts.values,
+            y=question_counts.index,
+            orientation='h',
+            title="Top 10 Most Common Questions",
+            labels={'x': 'Number of Responses', 'y': 'Question'}
+        )
+        fig.update_layout(height=400)
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # LAD analysis
+    if selected_lad == "All Local Authorities":
+        st.subheader("🏛️ Local Authority Analysis")
+        
+        # Top LADs by response count
+        lad_counts = filtered_data[lad_column].value_counts().head(10)
+        
+        fig = px.bar(
+            x=lad_counts.values,
+            y=lad_counts.index,
+            orientation='h',
+            title="Top 10 Local Authorities by Response Count",
+            labels={'x': 'Number of Responses', 'y': 'Local Authority'}
+        )
+        fig.update_layout(height=400)
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Detailed analysis for specific selections
+    if selected_question != "All Questions" and selected_lad != "All Local Authorities":
+        st.subheader("🔍 Detailed Analysis")
+        
+        # Get specific data
+        specific_data = connector.get_lad_survey_data(selected_lad)
+        question_data = specific_data[specific_data['question'] == selected_question]
+        
+        if not question_data.empty:
+            st.write(f"**Question:** {selected_question}")
+            st.write(f"**Local Authority:** {selected_lad}")
+            
+            # Show response data
+            response_columns = [col for col in question_data.columns if col not in [lad_column, 'question', 'sheet_name']]
+            if response_columns:
+                st.write("**Response Data:**")
+                response_data = question_data[response_columns].iloc[0]
+                for col, value in response_data.items():
+                    if pd.notna(value):
+                        st.write(f"- **{col}:** {value}")
+    
+    # Export options
+    st.subheader("💾 Export Options")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📥 Download Filtered Data (CSV)"):
+            csv = filtered_data.to_csv(index=False)
+            st.download_button(
+                label="Download CSV",
+                data=csv,
+                file_name=f"community_survey_filtered_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+    
+    with col2:
+        if st.button("📊 Download Summary Report"):
+            # Create summary report
+            report_data = {
+                'total_questions': summary.get('total_questions', 0),
+                'total_responses': summary.get('total_responses', 0),
+                'unique_lads': summary.get('unique_lads', 0),
+                'selected_filters': {
+                    'question': selected_question,
+                    'local_authority': selected_lad
+                },
+                'filtered_results': len(filtered_data)
+            }
+            
+            report_json = json.dumps(report_data, indent=2)
+            st.download_button(
+                label="Download Report",
+                data=report_json,
+                file_name=f"community_survey_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json"
+            )
 
 if __name__ == "__main__":
     main()

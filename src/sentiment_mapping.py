@@ -12,15 +12,17 @@ import folium
 from typing import Dict, List, Optional, Tuple
 import warnings
 from .data_config import get_data_config, use_real_data, use_dummy_data
+from .unified_data_connector import UnifiedDataConnector
 warnings.filterwarnings('ignore')
 
 class SentimentMapping:
     """Sentiment and social trust mapping with GIS integration"""
     
-    def __init__(self):
+    def __init__(self, data_connector=None):
         self.data_config = get_data_config()
         self.map_center = [51.5074, -0.1278]  # London coordinates
         self.map_zoom = 10
+        self.data_connector = data_connector  # Use shared data connector if provided
         
     def load_data(self, n_areas: int = 50) -> pd.DataFrame:
         """
@@ -32,8 +34,9 @@ class SentimentMapping:
         Returns:
             DataFrame with sentiment and trust data
         """
-        # Check if we should use real data
-        if use_real_data('community_life_survey') or use_real_data('ons_census'):
+        # Always try to use real data first (Good Neighbours, IMD, Population)
+        if (use_real_data('good_neighbours') or use_real_data('imd_data') or 
+            use_real_data('community_life_survey') or use_real_data('ons_census')):
             return self._load_real_data()
         else:
             print("Using sample data for sentiment mapping (configured for dummy data)")
@@ -41,12 +44,93 @@ class SentimentMapping:
     
     def _load_real_data(self) -> pd.DataFrame:
         """
-        Load real data from configured sources
-        This would integrate with actual data connectors
+        Load real data from configured sources using UnifiedDataConnector
         """
-        # TODO: Implement real data loading when connectors are available
-        print("Real data loading not yet implemented - using sample data")
-        return self.generate_sample_data(50)
+        try:
+            print("🔄 Loading real data for sentiment mapping...")
+            
+            # Use shared data connector or create new one if not provided
+            if self.data_connector is None:
+                self.data_connector = UnifiedDataConnector(auto_load=True)
+            else:
+                # Ensure data is loaded in shared connector
+                if self.data_connector.good_neighbours_data is None:
+                    self.data_connector._load_data_sources()
+            
+            # Get the real data sources
+            good_neighbours_data = self.data_connector.good_neighbours_data
+            imd_data = self.data_connector.imd_data
+            population_data = self.data_connector.msoa_population_data
+            
+            if good_neighbours_data is None:
+                print("⚠️ No Good Neighbours data available, using sample data")
+                return self.generate_sample_data(50)
+            
+            print(f"✅ Loaded real data: {len(good_neighbours_data)} MSOAs")
+            
+            # Start with Good Neighbours data as the base
+            combined_data = good_neighbours_data.copy()
+            
+            # Add IMD data if available
+            if imd_data is not None:
+                print(f"✅ Adding IMD data: {len(imd_data)} MSOAs")
+                # Merge IMD data
+                combined_data = combined_data.merge(
+                    imd_data[['msoa_code', 'msoa_imd_decile', 'msoa_imd_rank']], 
+                    on='msoa_code', 
+                    how='left'
+                )
+            else:
+                print("⚠️ No IMD data available")
+                # Add dummy IMD data
+                combined_data['msoa_imd_decile'] = np.random.randint(1, 11, len(combined_data))
+                combined_data['msoa_imd_rank'] = np.random.randint(1, 10000, len(combined_data))
+            
+            # Add population data if available
+            if population_data is not None:
+                print(f"✅ Adding population data: {len(population_data)} MSOAs")
+                # Merge population data
+                combined_data = combined_data.merge(
+                    population_data[['msoa_code', 'total_population']], 
+                    on='msoa_code', 
+                    how='left'
+                )
+                # Rename to 'population' for compatibility with existing code
+                combined_data['population'] = combined_data['total_population']
+            else:
+                print("⚠️ No population data available")
+                # Add dummy population data
+                combined_data['total_population'] = np.random.randint(1000, 15000, len(combined_data))
+                combined_data['population'] = combined_data['total_population']
+            
+            # Add geographic coordinates (dummy for now - would need real MSOA boundary data)
+            combined_data['latitude'] = np.random.normal(51.5074, 0.1, len(combined_data))
+            combined_data['longitude'] = np.random.normal(-0.1278, 0.1, len(combined_data))
+            
+            # Add local authority information (dummy for now)
+            combined_data['local_authority'] = 'London Borough'  # Would need real LA mapping
+            
+            # Ensure we have the required columns for sentiment mapping
+            required_columns = ['msoa_code', 'msoa_name', 'net_trust', 'msoa_imd_decile', 
+                              'total_population', 'latitude', 'longitude', 'local_authority']
+            
+            for col in required_columns:
+                if col not in combined_data.columns:
+                    print(f"⚠️ Missing column {col}, adding dummy data")
+                    if col == 'net_trust':
+                        combined_data[col] = np.random.normal(0, 0.2, len(combined_data))
+                    elif col == 'msoa_name':
+                        combined_data[col] = combined_data['msoa_code'].apply(lambda x: f"MSOA {x}")
+                    else:
+                        combined_data[col] = np.random.random(len(combined_data))
+            
+            print(f"✅ Real data loaded successfully: {len(combined_data)} MSOAs")
+            return combined_data
+            
+        except Exception as e:
+            print(f"❌ Error loading real data: {e}")
+            print("🔄 Falling back to sample data")
+            return self.generate_sample_data(50)
     
     def generate_sample_data(self, n_areas: int = 50) -> pd.DataFrame:
         """
@@ -133,45 +217,103 @@ class SentimentMapping:
         """
         df = data.copy()
         
-        # Social Trust Composite Score
-        trust_indicators = [
-            'trust_neighbors', 'trust_local_council', 'trust_police',
-            'trust_healthcare', 'trust_education'
-        ]
-        df['social_trust_composite'] = df[trust_indicators].mean(axis=1)
+        # Check if we have real data columns or dummy data columns
+        has_real_data = 'net_trust' in df.columns
         
-        # Community Cohesion Composite Score
-        cohesion_indicators = [
-            'community_belonging', 'volunteer_participation', 
-            'community_events_attendance', 'local_friendships'
-        ]
-        # Normalize volunteer participation to 1-10 scale
-        df['volunteer_normalized'] = (df['volunteer_participation'] / 30) * 10
-        df['events_normalized'] = np.clip(df['community_events_attendance'] / 5 * 10, 1, 10)
-        
-        df['community_cohesion_composite'] = df[['community_belonging', 'volunteer_normalized', 
-                                               'events_normalized', 'local_friendships']].mean(axis=1)
-        
-        # Sentiment Composite Score
-        sentiment_indicators = [
-            'overall_satisfaction', 'economic_optimism', 'future_outlook'
-        ]
-        df['sentiment_composite'] = df[sentiment_indicators].mean(axis=1)
-        
-        # Deprivation Composite Score (inverted - higher values = less deprived)
-        deprivation_indicators = [
-            'income_deprivation', 'employment_deprivation', 
-            'education_deprivation', 'health_deprivation'
-        ]
-        df['deprivation_composite'] = 100 - df[deprivation_indicators].mean(axis=1)
-        
-        # Overall Social Cohesion Score
-        df['overall_cohesion_score'] = (
-            df['social_trust_composite'] * 0.3 +
-            df['community_cohesion_composite'] * 0.3 +
-            df['sentiment_composite'] * 0.2 +
-            df['deprivation_composite'] / 10 * 0.2
-        )
+        if has_real_data:
+            # Use real data columns for composite scores
+            print("🔄 Calculating composite scores using real data columns...")
+            
+            # Social Trust Composite Score - use net_trust as primary indicator
+            # Scale net_trust (-1 to 1) to 1-10 scale for consistency
+            df['social_trust_composite'] = ((df['net_trust'] + 1) / 2) * 9 + 1
+            
+            # Community Cohesion Composite Score - derive from available data
+            # Use trust and caution indicators to estimate cohesion
+            if 'always_usually_trust' in df.columns and 'usually_almost_always_careful' in df.columns:
+                # Higher trust + lower caution = higher cohesion
+                trust_score = df['always_usually_trust'] / 100  # Convert percentage to 0-1
+                caution_score = df['usually_almost_always_careful'] / 100  # Convert percentage to 0-1
+                df['community_cohesion_composite'] = (trust_score + (1 - caution_score)) * 5  # Scale to 1-10
+            else:
+                # Fallback: use net_trust as cohesion proxy
+                df['community_cohesion_composite'] = df['social_trust_composite']
+            
+            # Sentiment Composite Score - derive from trust and deprivation
+            if 'msoa_imd_decile' in df.columns:
+                # Higher trust + lower deprivation = higher sentiment
+                # IMD decile: 1 = most deprived, 10 = least deprived
+                deprivation_score = (11 - df['msoa_imd_decile']) / 10  # Invert and normalize
+                trust_score = df['social_trust_composite'] / 10  # Normalize trust to 0-1
+                df['sentiment_composite'] = (trust_score + (1 - deprivation_score)) * 5  # Scale to 1-10
+            else:
+                # Fallback: use trust as sentiment proxy
+                df['sentiment_composite'] = df['social_trust_composite']
+            
+            # Deprivation Composite Score (inverted - higher values = less deprived)
+            if 'msoa_imd_decile' in df.columns:
+                # IMD decile: 1 = most deprived, 10 = least deprived
+                # Convert to 1-10 scale where 10 = least deprived
+                df['deprivation_composite'] = df['msoa_imd_decile']
+            else:
+                # Fallback: generate dummy deprivation data
+                df['deprivation_composite'] = np.random.randint(1, 11, len(df))
+            
+            # Overall Social Cohesion Score
+            df['overall_cohesion_score'] = (
+                df['social_trust_composite'] * 0.3 +
+                df['community_cohesion_composite'] * 0.3 +
+                df['sentiment_composite'] * 0.2 +
+                df['deprivation_composite'] / 10 * 0.2
+            )
+            
+            print(f"✅ Composite scores calculated using real data")
+            
+        else:
+            # Use dummy data columns for composite scores (original logic)
+            print("🔄 Calculating composite scores using dummy data columns...")
+            
+            # Social Trust Composite Score
+            trust_indicators = [
+                'trust_neighbors', 'trust_local_council', 'trust_police',
+                'trust_healthcare', 'trust_education'
+            ]
+            df['social_trust_composite'] = df[trust_indicators].mean(axis=1)
+            
+            # Community Cohesion Composite Score
+            cohesion_indicators = [
+                'community_belonging', 'volunteer_participation', 
+                'community_events_attendance', 'local_friendships'
+            ]
+            # Normalize volunteer participation to 1-10 scale
+            df['volunteer_normalized'] = (df['volunteer_participation'] / 30) * 10
+            df['events_normalized'] = np.clip(df['community_events_attendance'] / 5 * 10, 1, 10)
+            
+            df['community_cohesion_composite'] = df[['community_belonging', 'volunteer_normalized', 
+                                                   'events_normalized', 'local_friendships']].mean(axis=1)
+            
+            # Sentiment Composite Score
+            sentiment_indicators = [
+                'overall_satisfaction', 'economic_optimism', 'future_outlook'
+            ]
+            df['sentiment_composite'] = df[sentiment_indicators].mean(axis=1)
+            
+            # Deprivation Composite Score (inverted - higher values = less deprived)
+            deprivation_indicators = [
+                'income_deprivation', 'employment_deprivation', 
+                'education_deprivation', 'health_deprivation'
+            ]
+            df['deprivation_composite'] = 100 - df[deprivation_indicators].mean(axis=1)
+            
+            # Overall Social Cohesion Score
+            df['overall_cohesion_score'] = (
+                df['social_trust_composite'] * 0.3 +
+                df['community_cohesion_composite'] * 0.3 +
+                df['sentiment_composite'] * 0.2 +
+                df['deprivation_composite'] / 10 * 0.2
+            )
+            
+            print(f"✅ Composite scores calculated using dummy data")
         
         return df
     
@@ -277,7 +419,6 @@ class SentimentMapping:
                 lat='latitude',
                 lon='longitude',
                 color='social_trust_composite',
-                size='population',
                 hover_data=['msoa_name', 'msoa_code', 'local_authority'],
                 color_continuous_scale='RdYlGn',
                 mapbox_style='carto-positron',  # Light greyscale basemap
@@ -307,16 +448,35 @@ class SentimentMapping:
         Returns:
             Plotly figure object
         """
-        # Select indicators for correlation analysis
-        indicators = [
+        # Select indicators for correlation analysis - use available columns
+        base_indicators = [
             'social_trust_composite', 'community_cohesion_composite', 
-            'sentiment_composite', 'deprivation_composite',
-            'crime_rate', 'unemployment_rate', 'housing_stress',
-            'volunteer_participation', 'community_events_attendance'
+            'sentiment_composite', 'deprivation_composite'
         ]
         
+        # Add additional indicators if they exist in the data
+        additional_indicators = [
+            'crime_rate', 'unemployment_rate', 'housing_stress',
+            'volunteer_participation', 'community_events_attendance',
+            'net_trust', 'msoa_imd_decile', 'population'
+        ]
+        
+        # Build list of available indicators
+        indicators = base_indicators.copy()
+        for indicator in additional_indicators:
+            if indicator in data.columns:
+                indicators.append(indicator)
+        
+        # Ensure we have at least the base indicators
+        available_indicators = [ind for ind in indicators if ind in data.columns]
+        
+        if len(available_indicators) < 2:
+            print("⚠️ Not enough indicators for correlation analysis")
+            # Create a simple correlation with just the base indicators
+            available_indicators = [ind for ind in base_indicators if ind in data.columns]
+        
         # Calculate correlation matrix
-        corr_matrix = data[indicators].corr()
+        corr_matrix = data[available_indicators].corr()
         
         # Create heatmap
         fig = go.Figure(data=go.Heatmap(
@@ -341,6 +501,26 @@ class SentimentMapping:
         
         return fig
     
+    def _safe_population_size(self, data: pd.DataFrame) -> list:
+        """
+        Safely calculate population-based marker sizes, handling NaN values
+        
+        Args:
+            data: DataFrame with population data
+            
+        Returns:
+            List of safe size values for Plotly markers
+        """
+        if 'population' in data.columns:
+            # Handle NaN values by filling with median population
+            population = data['population'].fillna(data['population'].median())
+            # Convert to size (divide by 1000) and ensure minimum size
+            sizes = (population / 1000).clip(lower=5)  # Minimum size of 5
+            return sizes.tolist()
+        else:
+            # Default size if no population data
+            return [10] * len(data)
+    
     def create_deprivation_trust_scatter(self, data: pd.DataFrame) -> go.Figure:
         """
         Create scatter plot showing relationship between deprivation and trust
@@ -353,26 +533,47 @@ class SentimentMapping:
         """
         fig = go.Figure()
         
-        # Color by local authority
-        authorities = data['local_authority'].unique()
-        colors = px.colors.qualitative.Set3
-        
-        for i, authority in enumerate(authorities):
-            authority_data = data[data['local_authority'] == authority]
+        # Color by local authority (if available) or use a single color
+        if 'local_authority' in data.columns:
+            authorities = data['local_authority'].unique()
+            colors = px.colors.qualitative.Set3
             
+            for i, authority in enumerate(authorities):
+                authority_data = data[data['local_authority'] == authority]
+                
+                fig.add_trace(go.Scatter(
+                    x=authority_data['deprivation_composite'],
+                    y=authority_data['social_trust_composite'],
+                    mode='markers',
+                    name=authority,
+                    marker=dict(
+                        size=self._safe_population_size(authority_data),
+                        sizemode='diameter',
+                        sizemin=5,
+                        color=colors[i % len(colors)],
+                        opacity=0.7
+                    ),
+                    text=authority_data['msoa_name'] if 'msoa_name' in authority_data.columns else authority_data['msoa_code'],
+                    hovertemplate='<b>%{text}</b><br>' +
+                                'Deprivation: %{x:.1f}<br>' +
+                                'Trust: %{y:.1f}<br>' +
+                                '<extra></extra>'
+                ))
+        else:
+            # Fallback: use all data as one group
             fig.add_trace(go.Scatter(
-                x=authority_data['deprivation_composite'],
-                y=authority_data['social_trust_composite'],
+                x=data['deprivation_composite'],
+                y=data['social_trust_composite'],
                 mode='markers',
-                name=authority,
+                name='All Areas',
                 marker=dict(
-                    size=authority_data['population'] / 1000,
+                    size=self._safe_population_size(data),
                     sizemode='diameter',
                     sizemin=5,
-                    color=colors[i % len(colors)],
+                    color='blue',
                     opacity=0.7
                 ),
-                text=authority_data['msoa_name'],
+                text=data['msoa_name'] if 'msoa_name' in data.columns else data['msoa_code'],
                 hovertemplate='<b>%{text}</b><br>' +
                             'Deprivation: %{x:.1f}<br>' +
                             'Trust: %{y:.1f}<br>' +
