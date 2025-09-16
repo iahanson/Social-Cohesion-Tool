@@ -485,11 +485,20 @@ def create_interactive_uk_map():
                         </div>
                         """
                         
-                        # Add CircleMarker with risk-based coloring
+                        # Create popup content
+                        popup_content = f"""
+                        <div style="font-family: Arial, sans-serif;">
+                            <h4 style="margin: 0 0 10px 0; color: #333;">{lad_name}</h4>
+                            <p style="margin: 5px 0; font-size: 14px;"><strong>Risk Level:</strong> {risk_level}</p>
+                            <p style="margin: 5px 0; font-size: 14px;"><strong>Risk Score:</strong> {risk_score:.2f}</p>
+                        </div>
+                        """
+                        
                         folium.CircleMarker(
                             location=[lat, lon],
                             radius=8,  # Same size as news map originating locations
                             popup=folium.Popup(popup_content, max_width=350),
+                            tooltip=lad_name,  # Add tooltip for click detection
                             color=get_risk_color(risk_level),
                             fillColor=get_risk_color(risk_level),
                             fillOpacity=0.8,
@@ -811,6 +820,140 @@ def create_local_news_map():
         traceback.print_exc()
         return None
 
+def analyze_news_for_social_cohesion(news_data):
+    """Analyze news articles for social cohesion relevance and themes"""
+    try:
+        if news_data is None or news_data.empty:
+            return None
+        
+        # Initialize GenAI analyzer if available
+        genai_analyzer = None
+        try:
+            from src.genai_text_analyzer import GenAITextAnalyzer
+            genai_analyzer = GenAITextAnalyzer()
+        except Exception as e:
+            print(f"⚠️ GenAI analyzer not available: {e}")
+        
+        article_analysis = []
+        themes_count = {}
+        sentiment_counts = {'Positive': 0, 'Negative': 0, 'Neutral': 0}
+        total_relevant = 0
+        
+        # Social cohesion keywords to look for
+        cohesion_keywords = [
+            'community', 'neighbourhood', 'social cohesion', 'integration', 'diversity',
+            'inclusion', 'exclusion', 'racism', 'discrimination', 'hate crime',
+            'trust', 'cooperation', 'solidarity', 'belonging', 'isolation',
+            'polarization', 'division', 'unity', 'tolerance', 'respect',
+            'multicultural', 'immigration', 'refugee', 'asylum', 'ethnic',
+            'cultural', 'religious', 'faith', 'interfaith', 'dialogue'
+        ]
+        
+        for _, article in news_data.iterrows():
+            description = str(article.get('brief_description', ''))
+            
+            # Basic keyword analysis
+            description_lower = description.lower()
+            found_keywords = [kw for kw in cohesion_keywords if kw in description_lower]
+            
+            # Determine relevance
+            is_relevant = len(found_keywords) > 0 or any(word in description_lower for word in ['hate', 'racism', 'discrimination', 'community', 'neighbourhood'])
+            
+            if is_relevant:
+                total_relevant += 1
+            
+            # Analyze sentiment and themes
+            sentiment = 'Neutral'
+            themes = []
+            analysis_text = ""
+            
+            if genai_analyzer and description.strip():
+                try:
+                    # Use GenAI to analyze the article
+                    prompt = f"""
+                    Analyze this news article for social cohesion relevance:
+                    
+                    Article: "{description}"
+                    
+                    Please provide:
+                    1. Sentiment: Positive, Negative, or Neutral
+                    2. Social cohesion themes (e.g., community building, discrimination, diversity, etc.)
+                    3. Brief explanation of why it's relevant to social cohesion
+                    
+                    Format your response as:
+                    SENTIMENT: [Positive/Negative/Neutral]
+                    THEMES: [comma-separated themes]
+                    EXPLANATION: [brief explanation]
+                    """
+                    
+                    response = genai_analyzer.analyze_text(prompt)
+                    
+                    # Parse the response
+                    lines = response.split('\n')
+                    for line in lines:
+                        if line.startswith('SENTIMENT:'):
+                            sentiment = line.replace('SENTIMENT:', '').strip()
+                        elif line.startswith('THEMES:'):
+                            themes_text = line.replace('THEMES:', '').strip()
+                            themes = [t.strip() for t in themes_text.split(',') if t.strip()]
+                        elif line.startswith('EXPLANATION:'):
+                            analysis_text = line.replace('EXPLANATION:', '').strip()
+                    
+                except Exception as e:
+                    print(f"⚠️ Error analyzing article with GenAI: {e}")
+                    # Fallback to basic analysis
+                    if any(word in description_lower for word in ['hate', 'racism', 'discrimination', 'conflict', 'violence']):
+                        sentiment = 'Negative'
+                        themes = ['Discrimination', 'Conflict']
+                    elif any(word in description_lower for word in ['community', 'cooperation', 'unity', 'celebration', 'festival']):
+                        sentiment = 'Positive'
+                        themes = ['Community Building', 'Unity']
+                    else:
+                        sentiment = 'Neutral'
+                        themes = ['General']
+            else:
+                # Fallback analysis without GenAI
+                if any(word in description_lower for word in ['hate', 'racism', 'discrimination', 'conflict', 'violence']):
+                    sentiment = 'Negative'
+                    themes = ['Discrimination', 'Conflict']
+                elif any(word in description_lower for word in ['community', 'cooperation', 'unity', 'celebration', 'festival']):
+                    sentiment = 'Positive'
+                    themes = ['Community Building', 'Unity']
+                else:
+                    sentiment = 'Neutral'
+                    themes = ['General']
+            
+            # Count themes
+            for theme in themes:
+                themes_count[theme] = themes_count.get(theme, 0) + 1
+            
+            # Count sentiment
+            if sentiment in sentiment_counts:
+                sentiment_counts[sentiment] += 1
+            
+            # Add to analysis
+            article_analysis.append({
+                'Article': description[:100] + '...' if len(description) > 100 else description,
+                'Relevant': 'Yes' if is_relevant else 'No',
+                'Sentiment': sentiment,
+                'Themes': ', '.join(themes),
+                'Keywords Found': ', '.join(found_keywords) if found_keywords else 'None',
+                'Analysis': analysis_text if analysis_text else 'Basic keyword analysis'
+            })
+        
+        return {
+            'article_analysis': article_analysis,
+            'total_relevant': total_relevant,
+            'positive_count': sentiment_counts['Positive'],
+            'negative_count': sentiment_counts['Negative'],
+            'neutral_count': sentiment_counts['Neutral'],
+            'key_themes': dict(sorted(themes_count.items(), key=lambda x: x[1], reverse=True)[:10])
+        }
+        
+    except Exception as e:
+        print(f"❌ Error analyzing news for social cohesion: {e}")
+        return None
+
 def main():
     """Main application function"""
     
@@ -1028,8 +1171,18 @@ def dashboard_overview():
                 interactive_map, lads_data = create_interactive_uk_map()
                 
             if interactive_map is not None:
-                # Display the interactive map
+                # Display the interactive map with click handling
                 map_data = st_folium(interactive_map, width=450, height=500, key="uk_map")
+                
+                # Handle map click events for LAD selection
+                if map_data and map_data.get('last_object_clicked'):
+                    clicked_data = map_data['last_object_clicked']
+                    if clicked_data and 'tooltip' in clicked_data:
+                        lad_name = clicked_data['tooltip']
+                        if lad_name:
+                            # Update session state to trigger dropdown change
+                            st.session_state.selected_lad_from_map = lad_name
+                            st.rerun()
         
         with map_col2:
             st.markdown("### 📰 Local News Coverage Map")
@@ -1342,10 +1495,54 @@ def dashboard_overview():
                             
                             st.dataframe(display_news, use_container_width=True)
                             
-                            # News analysis
-                            st.subheader("News Analysis")
+                            # Social Cohesion Analysis
+                            st.subheader("🔍 Social Cohesion Analysis")
                             
-                            # Keywords analysis
+                            # Analyze each article for social cohesion relevance
+                            with st.spinner("Analyzing articles for social cohesion themes..."):
+                                cohesion_analysis = analyze_news_for_social_cohesion(news_data)
+                            
+                            if cohesion_analysis:
+                                # Display analysis summary
+                                st.markdown("**📊 Analysis Summary:**")
+                                col1, col2, col3, col4 = st.columns(4)
+                                
+                                with col1:
+                                    st.metric("Social Cohesion Relevant", cohesion_analysis['total_relevant'])
+                                with col2:
+                                    st.metric("Positive Sentiment", cohesion_analysis['positive_count'])
+                                with col3:
+                                    st.metric("Negative Sentiment", cohesion_analysis['negative_count'])
+                                with col4:
+                                    st.metric("Neutral Sentiment", cohesion_analysis['neutral_count'])
+                                
+                                # Display detailed analysis table
+                                st.markdown("**📋 Article-by-Article Analysis:**")
+                                
+                                # Create analysis dataframe
+                                analysis_df = pd.DataFrame(cohesion_analysis['article_analysis'])
+                                
+                                # Style the dataframe
+                                def highlight_sentiment(val):
+                                    if val == 'Positive':
+                                        return 'background-color: #d4edda; color: #155724'
+                                    elif val == 'Negative':
+                                        return 'background-color: #f8d7da; color: #721c24'
+                                    elif val == 'Neutral':
+                                        return 'background-color: #fff3cd; color: #856404'
+                                    return ''
+                                
+                                styled_df = analysis_df.style.applymap(highlight_sentiment, subset=['Sentiment'])
+                                st.dataframe(styled_df, use_container_width=True)
+                                
+                                # Display key themes
+                                if cohesion_analysis['key_themes']:
+                                    st.markdown("**🎯 Key Social Cohesion Themes:**")
+                                    for theme, count in cohesion_analysis['key_themes'].items():
+                                        st.write(f"• **{theme}**: {count} articles")
+                            
+                            # Keywords analysis (existing)
+                            st.subheader("📰 General News Analysis")
                             keywords_analysis = st.session_state.unified_data_connector.get_local_news_keywords_analysis()
                             if keywords_analysis and 'cohesion_keywords' in keywords_analysis:
                                 st.markdown("**Social Cohesion Keywords Found:**")
@@ -1369,7 +1566,6 @@ def dashboard_overview():
                             """)
                             
                             # Create a DataFrame for display
-                            import pandas as pd
                             similar_df = pd.DataFrame(similar_lads)
                             
                             # Format the data for better display
@@ -1565,11 +1761,12 @@ def early_warning_page():
             values=risk_dist.values,
             names=risk_dist.index,
             title="Risk Level Distribution",
+            color=risk_dist.index,  # Add this to ensure color mapping works
             color_discrete_map={
-                'Low': '#2E8B57',
-                'Medium': '#FFD700', 
-                'High': '#FF8C00',
-                'Critical': '#DC143C'
+                'Low': '#2E8B57',      # Green
+                'Medium': '#FFD700',   # Yellow/Gold
+                'High': '#FF8C00',     # Orange
+                'Critical': '#DC143C'  # Red
             }
         )
         st.plotly_chart(fig_pie, use_container_width=True)
@@ -1582,10 +1779,10 @@ def early_warning_page():
             title="Risk Level Counts",
             color=risk_dist.index,
             color_discrete_map={
-                'Low': '#2E8B57',
-                'Medium': '#FFD700',
-                'High': '#FF8C00', 
-                'Critical': '#DC143C'
+                'Low': '#2E8B57',      # Green
+                'Medium': '#FFD700',   # Yellow/Gold
+                'High': '#FF8C00',     # Orange
+                'Critical': '#DC143C'  # Red
             }
         )
         fig_bar.update_layout(showlegend=False)
