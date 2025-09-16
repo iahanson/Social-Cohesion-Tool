@@ -13,6 +13,7 @@ import json
 from .lsoa_msoa_mapper import lsoa_msoa_mapper
 from .community_life_survey_connector import CommunityLifeSurveyConnector
 from .unemployment_connector import UnemploymentConnector
+from .local_news_connector import LocalNewsConnector
 
 @dataclass
 class MSOADataResult:
@@ -44,6 +45,13 @@ class UnifiedDataConnector:
         except Exception as e:
             print(f"⚠️ Warning: Failed to initialize unemployment connector: {e}")
             self.unemployment_connector = None
+        
+        self.local_news_data = None
+        try:
+            self.local_news_connector = LocalNewsConnector()
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to initialize local news connector: {e}")
+            self.local_news_connector = None
         
         if auto_load:
             self._load_data_sources()
@@ -118,6 +126,13 @@ class UnifiedDataConnector:
                 print("✅ Unemployment data loaded successfully")
             else:
                 print("❌ Unemployment data loading failed")
+            
+            # Load local news data
+            self.local_news_data = self._load_local_news_data()
+            if self.local_news_data is not None:
+                print("✅ Local news data loaded successfully")
+            else:
+                print("❌ Local news data loading failed")
                 
         except Exception as e:
             print(f"❌ Error loading data sources: {e}")
@@ -1092,11 +1107,76 @@ class UnifiedDataConnector:
         
         if self.unemployment_connector is None:
             return {}
-            
+        
         try:
             return self.unemployment_connector.get_unemployment_summary()
         except Exception as e:
             print(f"❌ Error getting unemployment summary: {e}")
+            return {}
+    
+    def _load_local_news_data(self) -> Optional[pd.DataFrame]:
+        """Load local news data"""
+        try:
+            if self.local_news_connector is None:
+                print("⚠️ Local news connector not available, skipping local news data loading")
+                return None
+                
+            print("🔄 Loading local news data...")
+            
+            # Load data using the local news connector
+            news_data = self.local_news_connector.get_news_data()
+            
+            if news_data is None or news_data.empty:
+                print("⚠️ No local news data available")
+                return None
+            
+            print(f"✅ Loaded {len(news_data)} news articles")
+            return news_data
+            
+        except Exception as e:
+            print(f"❌ Error loading local news data: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def get_local_news_data(self) -> Optional[pd.DataFrame]:
+        """Get local news data"""
+        return self.local_news_data
+    
+    def get_local_news_by_lad(self, lad_name: str) -> Optional[pd.DataFrame]:
+        """Get local news data for a specific LAD"""
+        if self.local_news_connector is None:
+            print(f"⚠️ Warning: Local news connector not available")
+            return None
+        try:
+            return self.local_news_connector.get_news_by_lad(lad_name)
+        except Exception as e:
+            print(f"❌ Error getting local news data for {lad_name}: {e}")
+            return None
+    
+    def get_local_news_summary(self) -> Dict[str, Any]:
+        """Get summary of local news data"""
+        if self.local_news_data is None:
+            return {}
+        
+        if self.local_news_connector is None:
+            return {}
+        
+        try:
+            return self.local_news_connector.get_news_summary()
+        except Exception as e:
+            print(f"❌ Error getting local news summary: {e}")
+            return {}
+    
+    def get_local_news_keywords_analysis(self) -> Dict[str, Any]:
+        """Get keywords analysis of local news data"""
+        if self.local_news_connector is None:
+            return {}
+        
+        try:
+            return self.local_news_connector.get_news_keywords_analysis()
+        except Exception as e:
+            print(f"❌ Error getting local news keywords analysis: {e}")
             return {}
     
     def get_community_survey_summary(self) -> Dict[str, Any]:

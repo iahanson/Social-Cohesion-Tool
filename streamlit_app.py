@@ -122,8 +122,6 @@ def find_lad_by_coordinates(clicked_coords: List[float], lads_gdf) -> Optional[s
 def get_similar_lads_by_risk(lad_name: str, connector, top_n: int = 10) -> List[Dict[str, Any]]:
     """Get the top N most similar LADs based on risk scores"""
     try:
-        print(f"🔍 Debug - Looking for similar LADs for: {lad_name}")
-        
         # Get Early Warning System data
         if 'early_warning_system' not in st.session_state:
             from src.early_warning_system import EarlyWarningSystem
@@ -132,14 +130,10 @@ def get_similar_lads_by_risk(lad_name: str, connector, top_n: int = 10) -> List[
         ew_data = st.session_state.early_warning_system.run_full_analysis()
         
         if not ew_data or 'data' not in ew_data:
-            print(f"❌ Debug - No Early Warning System data available")
             return []
         
         risk_df = ew_data['data']
-        print(f"🔍 Debug - Risk data shape: {risk_df.shape}")
-        print(f"🔍 Debug - Available columns: {list(risk_df.columns)}")
         
-        # Show sample LAD names for debugging
         # Check for different possible column names
         lad_column = None
         if 'area_name' in risk_df.columns:
@@ -149,40 +143,28 @@ def get_similar_lads_by_risk(lad_name: str, connector, top_n: int = 10) -> List[
         elif 'msoa_name' in risk_df.columns:
             lad_column = 'msoa_name'
         
-        if lad_column:
-            sample_lads = risk_df[lad_column].unique()[:10]
-            print(f"🔍 Debug - Sample LAD names from '{lad_column}': {list(sample_lads)}")
-        else:
-            print(f"❌ Debug - No suitable LAD column found. Available columns: {list(risk_df.columns)}")
+        if not lad_column:
             return []
         
         # Find the target LAD's risk score
         target_lad_data = None
-        print(f"🔍 Debug - Searching for exact match: '{lad_name}'")
         
         for idx, row in risk_df.iterrows():
             area_name = row.get(lad_column, '')
             if area_name.lower() == lad_name.lower():
                 target_lad_data = row
-                print(f"✅ Debug - Found exact match: '{area_name}'")
                 break
         
         if target_lad_data is None:
-            print(f"🔍 Debug - No exact match found, trying partial matching")
             # Try partial matching
             for idx, row in risk_df.iterrows():
                 area_name = row.get(lad_column, '')
                 if lad_name.lower() in area_name.lower():
                     target_lad_data = row
-                    print(f"✅ Debug - Found partial match: '{area_name}'")
                     break
         
         if target_lad_data is None:
-            print(f"❌ Debug - No match found for '{lad_name}'")
-            print(f"🔍 Debug - Available LAD names (first 20): {list(risk_df[lad_column].unique()[:20])}")
-            
             # Try a more flexible matching approach
-            print(f"🔍 Debug - Trying flexible matching...")
             lad_words = lad_name.lower().split()
             
             for idx, row in risk_df.iterrows():
@@ -191,15 +173,12 @@ def get_similar_lads_by_risk(lad_name: str, connector, top_n: int = 10) -> List[
                 matches = sum(1 for word in lad_words if len(word) > 3 and word in area_name)
                 if matches >= 1:  # At least one significant word matches
                     target_lad_data = row
-                    print(f"✅ Debug - Found flexible match: '{row.get(lad_column, '')}' (matches: {matches})")
                     break
             
             if target_lad_data is None:
-                print(f"❌ Debug - Still no match found after flexible matching")
                 return []
         
         target_risk_score = target_lad_data.get('risk_score', 0)
-        print(f"🔍 Debug - Target LAD risk score: {target_risk_score}")
         
         # Calculate similarity (absolute difference from target risk score)
         similar_lads = []
@@ -220,18 +199,11 @@ def get_similar_lads_by_risk(lad_name: str, connector, top_n: int = 10) -> List[
                     'risk_difference': target_risk_score - risk_score
                 })
         
-        print(f"🔍 Debug - Found {len(similar_lads)} similar LADs")
-        
         # Sort by similarity (ascending difference)
         similar_lads.sort(key=lambda x: x['similarity_score'])
         
-        print(f"🔍 Debug - Top 5 most similar LADs:")
-        for i, lad in enumerate(similar_lads[:5]):
-            print(f"  {i+1}. {lad['lad_name']} (risk: {lad['risk_score']:.3f}, similarity: {lad['similarity_score']:.3f})")
-        
         # If no similar LADs found, create some sample data for demonstration
         if len(similar_lads) == 0:
-            print(f"⚠️ Debug - No similar LADs found, creating sample data")
             sample_lads = [
                 {'lad_name': 'Sample LAD 1', 'risk_score': target_risk_score + 0.1, 'risk_level': 'Medium', 'similarity_score': 0.1, 'risk_difference': -0.1},
                 {'lad_name': 'Sample LAD 2', 'risk_score': target_risk_score - 0.05, 'risk_level': 'Low', 'similarity_score': 0.05, 'risk_difference': 0.05},
@@ -256,6 +228,7 @@ def get_lad_comprehensive_data(lad_name: str, connector) -> Dict[str, Any]:
         'population_data': None,
         'community_survey_data': None,
         'unemployment_data': None,
+        'local_news_data': None,
         'msoa_count': 0,
         'lsoa_count': 0
     }
@@ -295,6 +268,11 @@ def get_lad_comprehensive_data(lad_name: str, connector) -> Dict[str, Any]:
         unemployment_data = connector.get_unemployment_by_lad(lad_name)
         if unemployment_data:
             data['unemployment_data'] = unemployment_data
+        
+        # Get local news data for this LAD
+        local_news_data = connector.get_local_news_by_lad(lad_name)
+        if local_news_data is not None and not local_news_data.empty:
+            data['local_news_data'] = local_news_data
         
         # Estimate LSOA count (roughly 4-8 LSOAs per MSOA)
         data['lsoa_count'] = data['msoa_count'] * 6  # Average estimate
@@ -398,7 +376,7 @@ def create_interactive_uk_map():
         # Initialize a folium map centered on the UK
         m = folium.Map(
             location=[52.5, -1.5], 
-            zoom_start=7, 
+            zoom_start=6, 
             tiles='cartodbpositron'
         )
         
@@ -489,86 +467,42 @@ def create_interactive_uk_map():
                     st.error("❌ No valid geometries found!")
                     return m
                 
-                # Try a simpler approach first - just add basic boundaries
+                # Add risk assessment markers using CircleMarker (same as news map)
                 try:
-                    # Add basic LAD boundaries first
-                    folium.GeoJson(
-                        lads,
-                        name='LAD Boundaries (Basic)',
-                        style_function=lambda x: {
-                            'color': 'red',
-                            'weight': 3,
-                            'fillOpacity': 0.5,
-                            'fillColor': 'yellow'
-                        }
-                    ).add_to(m)
+                    for _, row in lads.iterrows():
+                        lad_name = row[lad_name_col]
+                        lat = row['LAT']
+                        lon = row['LONG']
+                        risk_level = row.get('risk_level', 'Unknown')
+                        risk_score = row.get('risk_score', 0)
+                        
+                        # Create popup content
+                        popup_content = f"""
+                        <div style="font-family: Arial, sans-serif;">
+                            <h4 style="margin: 0 0 10px 0; color: #333;">{lad_name}</h4>
+                            <p style="margin: 5px 0; font-size: 14px;"><strong>Risk Level:</strong> {risk_level}</p>
+                            <p style="margin: 5px 0; font-size: 14px;"><strong>Risk Score:</strong> {risk_score:.2f}</p>
+                        </div>
+                        """
+                        
+                        # Add CircleMarker with risk-based coloring
+                        folium.CircleMarker(
+                            location=[lat, lon],
+                            radius=8,  # Same size as news map originating locations
+                            popup=folium.Popup(popup_content, max_width=350),
+                            color=get_risk_color(risk_level),
+                            fillColor=get_risk_color(risk_level),
+                            fillOpacity=0.8,
+                            weight=2
+                        ).add_to(m)
                     
-                    # Now try the risk choropleth with improved click handling
-                    geojson_layer = folium.GeoJson(
-                        lads,
-                        name='LAD Risk Choropleth',
-                        style_function=lambda feature: {
-                            'color': '#000000',
-                            'weight': 2,
-                            'fillOpacity': 0.7,
-                            'fillColor': get_risk_color(feature['properties']['risk_level'])
-                        },
-                        tooltip=folium.features.GeoJsonTooltip(
-                            fields=[lad_name_col, 'risk_score', 'risk_level'], 
-                            aliases=['LAD Name', 'Risk Score', 'Risk Level']
-                        ),
-                        popup=folium.features.GeoJsonPopup(
-                            fields=[lad_name_col, 'risk_score', 'risk_level'],
-                            aliases=['LAD Name', 'Risk Score', 'Risk Level'],
-                            localize=True,
-                            labels=True
-                        )
-                    )
-                    
-                    # Add click event handler
-                    geojson_layer.add_child(
-                        folium.ClickForMarker(
-                            popup=f"Clicked LAD: {lad_name_col}"
-                        )
-                    )
-                    
-                    geojson_layer.add_to(m)
+                    print(f"✅ Successfully added {len(lads)} risk assessment markers")
                     
                 except Exception as e:
-                    st.error(f"❌ Error adding LAD boundaries: {e}")
-                    import traceback
-                    st.error(f"Traceback: {traceback.format_exc()}")
-                    
-                    # Try even simpler approach
-                    try:
-                        st.info("🔄 Trying fallback approach...")
-                        folium.GeoJson(
-                            lads,
-                            name='LAD Fallback',
-                            style_function=lambda x: {
-                                'color': 'blue',
-                                'weight': 1,
-                                'fillOpacity': 0.3,
-                                'fillColor': 'lightblue'
-                            }
-                        ).add_to(m)
-                    except Exception as e2:
-                        st.error(f"❌ Fallback also failed: {e2}")
+                    print(f"❌ Error adding risk markers: {e}")
+                    st.error(f"Could not add risk assessment markers: {e}")
                 
-                # Add legend with better sizing
-                legend_html = '''
-                <div style="position: fixed; 
-                            bottom: 50px; left: 50px; width: 220px; height: 140px; 
-                            background-color: white; border:2px solid grey; z-index:9999; 
-                            font-size:12px; padding: 12px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.2)">
-                <p style="margin: 0 0 8px 0; font-weight: bold; font-size: 14px;">Risk Level Legend</p>
-                <p style="margin: 4px 0; line-height: 1.3;"><span style="display: inline-block; width: 12px; height: 12px; background-color: #2E8B57; margin-right: 8px;"></span> Low Risk (0.0-0.4)</p>
-                <p style="margin: 4px 0; line-height: 1.3;"><span style="display: inline-block; width: 12px; height: 12px; background-color: #FFD700; margin-right: 8px;"></span> Medium Risk (0.4-0.6)</p>
-                <p style="margin: 4px 0; line-height: 1.3;"><span style="display: inline-block; width: 12px; height: 12px; background-color: #FF8C00; margin-right: 8px;"></span> High Risk (0.6-0.8)</p>
-                <p style="margin: 4px 0; line-height: 1.3;"><span style="display: inline-block; width: 12px; height: 12px; background-color: #DC143C; margin-right: 8px;"></span> Critical Risk (0.8-1.0)</p>
-                </div>
-                '''
-                m.get_root().html.add_child(folium.Element(legend_html))
+                # Note: Legend is displayed below the maps instead of on the map
                 
                 
             else:
@@ -597,6 +531,286 @@ def create_interactive_uk_map():
         st.error(f"Traceback: {traceback.format_exc()}")
         return None, None
 
+def create_local_news_map():
+    """Create an interactive UK map showing local news coverage with orange dots for originating locations and purple dots for referenced places"""
+    if not FOLIUM_AVAILABLE or not GEOPANDAS_AVAILABLE:
+        st.error("Folium or GeoPandas not available. Cannot create local news map.")
+        return None
+    
+    try:
+        # Get local news data
+        connector = st.session_state.unified_data_connector
+        if connector.local_news_data is None:
+            st.warning("No local news data available")
+            return None
+        
+        news_data = connector.local_news_data
+        
+        # Create base map centered on UK
+        news_map = folium.Map(
+            location=[52.5, -1.5],  # Center of UK
+            zoom_start=6,
+            tiles='cartodbpositron'
+        )
+        
+        # Load LAD data for coordinates
+        csv_path = 'data/Local_Authority_Districts_May_2023.csv'
+        lads_df = pd.read_csv(csv_path)
+        
+        # Debug: Check CSV columns
+        print(f"📰 CSV columns: {list(lads_df.columns)}")
+        print(f"📰 CSV shape: {lads_df.shape}")
+        print(f"📰 Sample CSV data:")
+        print(lads_df.head(3))
+        
+        # Create coordinate mapping for LADs
+        lad_coords = {}
+        for _, row in lads_df.iterrows():
+            # Try different possible column names for LAD name
+            lad_name = row.get('LAD24NM', '') or row.get('LAD23NM', '') or row.get('LAD22NM', '')
+            lat = row.get('LAT', None)
+            lon = row.get('LONG', None)
+            if pd.notna(lat) and pd.notna(lon) and lad_name:
+                lad_coords[lad_name] = (lat, lon)
+        
+        print(f"📰 Loaded {len(lad_coords)} LAD coordinates")
+        if len(lad_coords) > 0:
+            print(f"📰 Sample coordinates: {list(lad_coords.items())[:5]}")
+        
+        # Debug: Show sample mapped LADs and coordinates for troubleshooting
+        sample_mapped_lads = news_data['mapped_lad'].dropna().unique()[:10]
+        sample_coords = list(lad_coords.keys())[:10]
+        
+        # Count how many mapped LADs have coordinates
+        mapped_with_coords = 0
+        for lad in sample_mapped_lads:
+            if lad in lad_coords:
+                mapped_with_coords += 1
+        
+        # Debug: Show mapping statistics
+        print(f"📰 News map debug:")
+        print(f"   Total news articles: {len(news_data)}")
+        print(f"   Sample mapped LADs: {list(sample_mapped_lads)}")
+        print(f"   Sample coordinate LADs: {list(sample_coords)}")
+        print(f"   Mapped LADs with coordinates: {mapped_with_coords}/{len(sample_mapped_lads)}")
+        
+        # Debug: Show detailed mapping for first few articles
+        print(f"📰 Detailed mapping debug:")
+        for i, (_, article) in enumerate(news_data.head(5).iterrows()):
+            original_lad = article.get('local_authority_district', '')
+            mapped_lad = article.get('mapped_lad', '')
+            referenced_place = article.get('referenced_place', '')
+            mapped_place = article.get('mapped_referenced_place', '')
+            print(f"   Article {i+1}:")
+            print(f"     Original LAD: '{original_lad}' -> Mapped: '{mapped_lad}'")
+            print(f"     Referenced: '{referenced_place}' -> Mapped: '{mapped_place}'")
+            print(f"     Has coordinates: {mapped_lad in lad_coords if pd.notna(mapped_lad) else False}")
+            print(f"     Referenced has coordinates: {mapped_place in lad_coords if pd.notna(mapped_place) else False}")
+        
+        # Add originating locations (orange dots)
+        originating_locations = {}
+        exact_matches = 0
+        partial_matches = 0
+        no_matches = 0
+        
+        for _, article in news_data.iterrows():
+            # Get the original LAD name and normalize it directly
+            original_lad = article.get('local_authority_district', '')
+            if pd.notna(original_lad):
+                # Normalize the original LAD name
+                normalized_lad = original_lad.lower().strip()
+                # Remove common suffixes
+                for suffix in [' metropolitan borough council', ' borough council', ' city council', ' district council', ' unitary authority', ' council', ' borough', ' district', ' city']:
+                    if normalized_lad.endswith(suffix):
+                        normalized_lad = normalized_lad[:-len(suffix)].strip()
+                        break
+                
+                # Try to find a match in coordinates
+                matched = False
+                for coord_lad in lad_coords.keys():
+                    coord_lad_normalized = coord_lad.lower().strip()
+                    # Try exact match first
+                    if normalized_lad == coord_lad_normalized:
+                        exact_matches += 1
+                        matched = True
+                        if coord_lad not in originating_locations:
+                            originating_locations[coord_lad] = []
+                        originating_locations[coord_lad].append({
+                            'description': article.get('brief_description', ''),
+                            'url': article.get('news_url', ''),
+                            'source': article.get('source_id', '')
+                        })
+                        break
+                    # Try substring matching as fallback
+                    elif (normalized_lad in coord_lad_normalized and len(normalized_lad) > 3) or \
+                         (coord_lad_normalized in normalized_lad and len(coord_lad_normalized) > 3):
+                        partial_matches += 1
+                        matched = True
+                        if coord_lad not in originating_locations:
+                            originating_locations[coord_lad] = []
+                        originating_locations[coord_lad].append({
+                            'description': article.get('brief_description', ''),
+                            'url': article.get('news_url', ''),
+                            'source': article.get('source_id', '')
+                        })
+                        break
+                
+                if not matched:
+                    no_matches += 1
+                    print(f"   No match for: '{original_lad}' (normalized: '{normalized_lad}')")
+        
+        print(f"📰 Originating location matching:")
+        print(f"   Exact matches: {exact_matches}")
+        print(f"   Partial matches: {partial_matches}")
+        print(f"   No matches: {no_matches}")
+        
+        # Add referenced places (purple dots)
+        referenced_locations = {}
+        ref_exact_matches = 0
+        ref_partial_matches = 0
+        ref_no_matches = 0
+        
+        for _, article in news_data.iterrows():
+            # Get the original referenced place and normalize it directly
+            original_place = article.get('referenced_place', '')
+            if pd.notna(original_place):
+                # Normalize the original place name
+                normalized_place = original_place.lower().strip()
+                # Remove common suffixes
+                for suffix in [' metropolitan borough council', ' borough council', ' city council', ' district council', ' unitary authority', ' council', ' borough', ' district', ' city']:
+                    if normalized_place.endswith(suffix):
+                        normalized_place = normalized_place[:-len(suffix)].strip()
+                        break
+                
+                # Try to find a match in coordinates
+                matched = False
+                for coord_lad in lad_coords.keys():
+                    coord_lad_normalized = coord_lad.lower().strip()
+                    # Try exact match first
+                    if normalized_place == coord_lad_normalized:
+                        ref_exact_matches += 1
+                        matched = True
+                        if coord_lad not in referenced_locations:
+                            referenced_locations[coord_lad] = []
+                        referenced_locations[coord_lad].append({
+                            'description': article.get('brief_description', ''),
+                            'url': article.get('news_url', ''),
+                            'source': article.get('source_id', '')
+                        })
+                        break
+                    # Try substring matching as fallback
+                    elif (normalized_place in coord_lad_normalized and len(normalized_place) > 3) or \
+                         (coord_lad_normalized in normalized_place and len(coord_lad_normalized) > 3):
+                        ref_partial_matches += 1
+                        matched = True
+                        if coord_lad not in referenced_locations:
+                            referenced_locations[coord_lad] = []
+                        referenced_locations[coord_lad].append({
+                            'description': article.get('brief_description', ''),
+                            'url': article.get('news_url', ''),
+                            'source': article.get('source_id', '')
+                        })
+                        break
+                
+                if not matched:
+                    ref_no_matches += 1
+        
+        print(f"📰 Referenced location matching:")
+        print(f"   Exact matches: {ref_exact_matches}")
+        print(f"   Partial matches: {ref_partial_matches}")
+        print(f"   No matches: {ref_no_matches}")
+        
+        # Debug: Show location counts
+        print(f"📰 Location counts:")
+        print(f"   Originating locations: {len(originating_locations)}")
+        print(f"   Referenced locations: {len(referenced_locations)}")
+        
+        # Add originating locations as orange dots
+        for lad_name, articles in originating_locations.items():
+            lat, lon = lad_coords[lad_name]
+            
+            # Create popup content
+            popup_content = f"""
+            <div style="width: 300px;">
+                <h4 style="color: #ff8c00; margin-bottom: 10px;">📰 {lad_name}</h4>
+                <p><strong>Originating Location</strong></p>
+                <p><strong>Articles:</strong> {len(articles)}</p>
+                <hr style="margin: 10px 0;">
+            """
+            
+            for i, article in enumerate(articles[:3]):  # Show first 3 articles
+                description = article['description'][:100] + "..." if len(article['description']) > 100 else article['description']
+                popup_content += f"""
+                <div style="margin-bottom: 10px;">
+                    <p style="font-size: 12px; margin: 5px 0;"><strong>Article {i+1}:</strong></p>
+                    <p style="font-size: 11px; margin: 5px 0;">{description}</p>
+                    <p style="font-size: 10px; color: #666; margin: 5px 0;">Source: {article['source']}</p>
+                </div>
+                """
+            
+            if len(articles) > 3:
+                popup_content += f"<p style=\"font-size: 11px; color: #666;\">... and {len(articles) - 3} more articles</p>"
+            
+            popup_content += "</div>"
+            
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=8,
+                popup=folium.Popup(popup_content, max_width=350),
+                color='#ff8c00',
+                fillColor='#ff8c00',
+                fillOpacity=0.8,
+                weight=2
+            ).add_to(news_map)
+        
+        # Add referenced places as purple dots
+        for lad_name, articles in referenced_locations.items():
+            lat, lon = lad_coords[lad_name]
+            
+            # Create popup content
+            popup_content = f"""
+            <div style="width: 300px;">
+                <h4 style="color: #8a2be2; margin-bottom: 10px;">📍 {lad_name}</h4>
+                <p><strong>Referenced Location</strong></p>
+                <p><strong>Mentions:</strong> {len(articles)}</p>
+                <hr style="margin: 10px 0;">
+            """
+            
+            for i, article in enumerate(articles[:3]):  # Show first 3 articles
+                description = article['description'][:100] + "..." if len(article['description']) > 100 else article['description']
+                popup_content += f"""
+                <div style="margin-bottom: 10px;">
+                    <p style="font-size: 12px; margin: 5px 0;"><strong>Mention {i+1}:</strong></p>
+                    <p style="font-size: 11px; margin: 5px 0;">{description}</p>
+                    <p style="font-size: 10px; color: #666; margin: 5px 0;">Source: {article['source']}</p>
+                </div>
+                """
+            
+            if len(articles) > 3:
+                popup_content += f"<p style=\"font-size: 11px; color: #666;\">... and {len(articles) - 3} more mentions</p>"
+            
+            popup_content += "</div>"
+            
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=6,
+                popup=folium.Popup(popup_content, max_width=350),
+                color='#8a2be2',
+                fillColor='#8a2be2',
+                fillOpacity=0.8,
+                weight=2
+            ).add_to(news_map)
+        
+        # Note: Legend will be added below the maps instead of on the map
+        
+        return news_map
+        
+    except Exception as e:
+        st.error(f"Error creating local news map: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 def main():
     """Main application function"""
     
@@ -611,17 +825,17 @@ def main():
         st.session_state.current_page = "📊 Dashboard Overview"
     
     page_options = [
-        "📊 Dashboard Overview",
-        "🚨 Early Warning System",
-        "🗺️ Sentiment & Trust Mapping",
+            "📊 Dashboard Overview",
+            "🚨 Early Warning System",
+            "🗺️ Sentiment & Trust Mapping",
         "🤝 Good Neighbours Trust Data",
         "📋 Community Life Survey",
-        "💡 Intervention Recommendations",
-        "🎯 Engagement Simulator",
-        "📧 Alert Management",
+            "💡 Intervention Recommendations",
+            "🎯 Engagement Simulator",
+            "📧 Alert Management",
         "🤖 GenAI Text Analysis",
-        "⚙️ System Settings"
-    ]
+            "⚙️ System Settings"
+        ]
     
     try:
         current_index = page_options.index(st.session_state.current_page)
@@ -687,7 +901,7 @@ def dashboard_overview():
         survey_data = st.session_state.unified_data_connector.get_community_survey_data()
     
     # Key metrics
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
     
     with col1:
         st.metric(
@@ -739,6 +953,22 @@ def dashboard_overview():
             delta=f"{ew_data['summary']['anomalous_areas']} anomalies"
         )
     
+    with col7:
+        # Get local news summary
+        news_summary = st.session_state.unified_data_connector.get_local_news_summary()
+        if news_summary and 'total_articles' in news_summary:
+            st.metric(
+                label="News Articles",
+                value=news_summary['total_articles'],
+                delta=f"{news_summary['unique_lads_covered']} LADs covered"
+            )
+        else:
+            st.metric(
+                label="News Articles",
+                value="N/A",
+                delta="Data not available"
+            )
+    
     # Data Source Status
     st.subheader("📋 Data Source Status")
     
@@ -751,6 +981,7 @@ def dashboard_overview():
         - Index of Multiple Deprivation (IMD)
         - Population Demographics (Census 2022)
         - Community Life Survey 2023-24
+        - Local News Coverage Data
         - Early Warning System Indicators
         """)
     
@@ -784,16 +1015,55 @@ def dashboard_overview():
             st.session_state.page = "Early Warning System"
             st.rerun()
     
-    # Interactive UK Map
-    st.subheader("🗺️ UK Local Authority Districts")
+    # Interactive Maps Section
+    st.subheader("🗺️ UK Data Visualization")
     
     if FOLIUM_AVAILABLE and GEOPANDAS_AVAILABLE:
-        with st.spinner("Loading interactive map..."):
-            interactive_map, lads_data = create_interactive_uk_map()
-            
+        # Create two columns for side-by-side maps
+        map_col1, map_col2 = st.columns(2)
+        
+        with map_col1:
+            st.markdown("### 🚨 Risk Assessment Map")
+            with st.spinner("Loading risk assessment map..."):
+                interactive_map, lads_data = create_interactive_uk_map()
+                
+            if interactive_map is not None:
+                # Display the interactive map
+                map_data = st_folium(interactive_map, width=450, height=500, key="uk_map")
+        
+        with map_col2:
+            st.markdown("### 📰 Local News Coverage Map")
+            with st.spinner("Loading local news map..."):
+                news_map = create_local_news_map()
+                
+            if news_map is not None:
+                # Display the local news map
+                news_map_data = st_folium(news_map, width=450, height=500, key="news_map")
+            else:
+                st.warning("No local news data available for mapping")
+        
+        # Add legends below the maps
+        st.markdown("---")
+        legend_col1, legend_col2 = st.columns(2)
+        
+        with legend_col1:
+            st.markdown("""
+            **🚨 Risk Assessment Map Legend:**
+            - 🟢 **Low Risk** (0.0 - 0.3)
+            - 🟡 **Medium Risk** (0.3 - 0.6) 
+            - 🟠 **High Risk** (0.6 - 0.8)
+            - 🔴 **Critical Risk** (0.8 - 1.0)
+            """)
+        
+        with legend_col2:
+            st.markdown("""
+            **📰 Local News Coverage Map Legend:**
+            - 🟠 **Orange Dots** - Originating Locations (where news comes from)
+            - 🟣 **Purple Dots** - Referenced Places (locations mentioned in articles)
+            """)
+        
+        # Use the risk assessment map for LAD selection (keep existing functionality)
         if interactive_map is not None:
-            # Display the interactive map - made bigger
-            map_data = st_folium(interactive_map, width=900, height=600, key="uk_map")
             
             # Check if a LAD was clicked on the map
             selected_lad_from_map = None
@@ -855,7 +1125,7 @@ def dashboard_overview():
                     # Display LAD data in tabs
                     st.subheader(f"📊 Data for {selected_lad_manual}")
                     
-                    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📈 Overview", "🏘️ Population", "📊 IMD Data", "🤝 Social Trust", "📋 Community Survey", "💼 Unemployment", "🔍 Similar LADs"])
+                    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📈 Overview", "🏘️ Population", "📊 IMD Data", "🤝 Social Trust", "📋 Community Survey", "💼 Unemployment", "📰 Local News", "🔍 Similar LADs"])
                     
                     with tab1:
                         st.markdown(f"""
@@ -1026,6 +1296,66 @@ def dashboard_overview():
                             st.warning("⚠️ No unemployment data available for this LAD")
                     
                     with tab7:
+                        if lad_data['local_news_data'] is not None:
+                            st.subheader("Local News Coverage")
+                            news_data = lad_data['local_news_data']
+                            
+                            # Display news metrics
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Total Articles", len(news_data))
+                            with col2:
+                                originating_articles = len(news_data[news_data['mapped_lad'] == selected_lad_manual])
+                                st.metric("Originating Articles", originating_articles)
+                            with col3:
+                                referenced_articles = len(news_data[news_data['mapped_referenced_place'] == selected_lad_manual])
+                                st.metric("Referenced Articles", referenced_articles)
+                            
+                            # Display news summary
+                            st.markdown(f"""
+                            **News Coverage Summary:**
+                            - **Total Articles:** {len(news_data)} articles mention or originate from {selected_lad_manual}
+                            - **Originating:** {originating_articles} articles from local authorities in this area
+                            - **Referenced:** {referenced_articles} articles that reference this area
+                            """)
+                            
+                            # Display detailed news data
+                            st.subheader("Detailed News Articles")
+                            
+                            # Clean up the dataframe for display
+                            display_news = news_data.copy()
+                            
+                            # Select relevant columns for display
+                            display_columns = ['brief_description', 'mapped_lad', 'mapped_referenced_place', 'news_url', 'source_id']
+                            available_columns = [col for col in display_columns if col in display_news.columns]
+                            display_news = display_news[available_columns]
+                            
+                            # Rename columns for better display
+                            column_rename = {
+                                'brief_description': 'Article Description',
+                                'mapped_lad': 'Originating LAD',
+                                'mapped_referenced_place': 'Referenced LAD',
+                                'news_url': 'News URL',
+                                'source_id': 'Source'
+                            }
+                            display_news = display_news.rename(columns=column_rename)
+                            
+                            st.dataframe(display_news, use_container_width=True)
+                            
+                            # News analysis
+                            st.subheader("News Analysis")
+                            
+                            # Keywords analysis
+                            keywords_analysis = st.session_state.unified_data_connector.get_local_news_keywords_analysis()
+                            if keywords_analysis and 'cohesion_keywords' in keywords_analysis:
+                                st.markdown("**Social Cohesion Keywords Found:**")
+                                for keyword, count in keywords_analysis['cohesion_keywords'].items():
+                                    st.write(f"• **{keyword}**: {count} mentions")
+                            
+                        else:
+                            st.warning("⚠️ No local news data available for this LAD")
+                    
+                    with tab8:
                         st.subheader("Similar LADs by Risk Score")
                         
                         # Get similar LADs
