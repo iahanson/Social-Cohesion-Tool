@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_e514b59d77d79c8fca9f5f849c3fb942 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_e514b59d77d79c8fca9f5f849c3fb942" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_e514b59d77d79c8fca9f5f849c3fb942 = L.map(
+                "map_e514b59d77d79c8fca9f5f849c3fb942",
+                {
+                    center: [54.7023, -3.2765],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 6,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_b67d90f11a06a438f013e6dd0a006998 = L.tileLayer(
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 19,
+  "maxNativeZoom": 19,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_b67d90f11a06a438f013e6dd0a006998.addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+            var marker_a49b3ddf5b3d7068fce6352802cbf191 = L.marker(
+                [53.4808, -2.2426],
+                {
+}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+            var icon_7fcd9ac4e1add98c2be061425c589a27 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_6ab7884de597e96450451dd997ed7079 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_56c6de9cf3148a29007c50883a1b2a34 = $(`<div id="html_56c6de9cf3148a29007c50883a1b2a34" style="width: 100.0%; height: 100.0%;"><b>Manchester Evening News</b><br>Coverage: 50km</div>`)[0];
+                popup_6ab7884de597e96450451dd997ed7079.setContent(html_56c6de9cf3148a29007c50883a1b2a34);
+            
+        
+
+        marker_a49b3ddf5b3d7068fce6352802cbf191.bindPopup(popup_6ab7884de597e96450451dd997ed7079)
+        ;
+
+        
+    
+    
+                marker_a49b3ddf5b3d7068fce6352802cbf191.setIcon(icon_7fcd9ac4e1add98c2be061425c589a27);
+            
+    
+            var circle_60b883a1e45ce59dfe6c902668f70093 = L.circle(
+                [53.4808, -2.2426],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "lightblue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 50000, "stroke": true, "weight": 3}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+        var popup_c8ce72c49e13a6753412ecc02afdc600 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_e2b08584677b788835014a8901eb5b77 = $(`<div id="html_e2b08584677b788835014a8901eb5b77" style="width: 100.0%; height: 100.0%;">Manchester Evening News coverage area</div>`)[0];
+                popup_c8ce72c49e13a6753412ecc02afdc600.setContent(html_e2b08584677b788835014a8901eb5b77);
+            
+        
+
+        circle_60b883a1e45ce59dfe6c902668f70093.bindPopup(popup_c8ce72c49e13a6753412ecc02afdc600)
+        ;
+
+        
+    
+    
+            var marker_dfdb45bee1291b0e43119cfbf62bea17 = L.marker(
+                [52.4862, -1.8904],
+                {
+}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+            var icon_83945358a9cff3a5020ff69ed0dd7b80 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_db64e9b4053182ab27b967182ca6773a = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_a4212510863efc322d750a76a6b9b51d = $(`<div id="html_a4212510863efc322d750a76a6b9b51d" style="width: 100.0%; height: 100.0%;"><b>Birmingham Live</b><br>Coverage: 40km</div>`)[0];
+                popup_db64e9b4053182ab27b967182ca6773a.setContent(html_a4212510863efc322d750a76a6b9b51d);
+            
+        
+
+        marker_dfdb45bee1291b0e43119cfbf62bea17.bindPopup(popup_db64e9b4053182ab27b967182ca6773a)
+        ;
+
+        
+    
+    
+                marker_dfdb45bee1291b0e43119cfbf62bea17.setIcon(icon_83945358a9cff3a5020ff69ed0dd7b80);
+            
+    
+            var circle_8de0fbcc2b7c43b5dc17fcae4569a177 = L.circle(
+                [52.4862, -1.8904],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "lightblue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 40000, "stroke": true, "weight": 3}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+        var popup_f8375b1c6a10b07a62fc8ea8d163fd8e = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_9f5fa97a87bc7e123f7fb7104d7f7f01 = $(`<div id="html_9f5fa97a87bc7e123f7fb7104d7f7f01" style="width: 100.0%; height: 100.0%;">Birmingham Live coverage area</div>`)[0];
+                popup_f8375b1c6a10b07a62fc8ea8d163fd8e.setContent(html_9f5fa97a87bc7e123f7fb7104d7f7f01);
+            
+        
+
+        circle_8de0fbcc2b7c43b5dc17fcae4569a177.bindPopup(popup_f8375b1c6a10b07a62fc8ea8d163fd8e)
+        ;
+
+        
+    
+    
+            var marker_d2a272cbf8244a0c276c7ecc6ea99e6f = L.marker(
+                [53.4084, -2.9916],
+                {
+}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+            var icon_67e3e529a4c0cdb3a21923e4b1979d94 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_779046eecb9c487bb8476f64f006ef5f = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_44abd40fe00d8a1b36a8b88b2ea887a2 = $(`<div id="html_44abd40fe00d8a1b36a8b88b2ea887a2" style="width: 100.0%; height: 100.0%;"><b>Liverpool Echo</b><br>Coverage: 45km</div>`)[0];
+                popup_779046eecb9c487bb8476f64f006ef5f.setContent(html_44abd40fe00d8a1b36a8b88b2ea887a2);
+            
+        
+
+        marker_d2a272cbf8244a0c276c7ecc6ea99e6f.bindPopup(popup_779046eecb9c487bb8476f64f006ef5f)
+        ;
+
+        
+    
+    
+                marker_d2a272cbf8244a0c276c7ecc6ea99e6f.setIcon(icon_67e3e529a4c0cdb3a21923e4b1979d94);
+            
+    
+            var circle_113555cae044d16722eef87dbda0af05 = L.circle(
+                [53.4084, -2.9916],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "lightblue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 45000, "stroke": true, "weight": 3}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+        var popup_8f41d6744a30ca9e0d884fec882d07d0 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_c1607e6006aea1d0196b823a4eb13c25 = $(`<div id="html_c1607e6006aea1d0196b823a4eb13c25" style="width: 100.0%; height: 100.0%;">Liverpool Echo coverage area</div>`)[0];
+                popup_8f41d6744a30ca9e0d884fec882d07d0.setContent(html_c1607e6006aea1d0196b823a4eb13c25);
+            
+        
+
+        circle_113555cae044d16722eef87dbda0af05.bindPopup(popup_8f41d6744a30ca9e0d884fec882d07d0)
+        ;
+
+        
+    
+    
+            var marker_536d9943542c2071a7e02b167289c303 = L.marker(
+                [53.8008, -1.5491],
+                {
+}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+            var icon_cfcf124170689af0b462dd0bf56e5f97 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_f6822cb752a3710f777aed2524ac8df4 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_2a2cd88d9f2f89b4d5eeccbbd2506135 = $(`<div id="html_2a2cd88d9f2f89b4d5eeccbbd2506135" style="width: 100.0%; height: 100.0%;"><b>Yorkshire Evening Post</b><br>Coverage: 35km</div>`)[0];
+                popup_f6822cb752a3710f777aed2524ac8df4.setContent(html_2a2cd88d9f2f89b4d5eeccbbd2506135);
+            
+        
+
+        marker_536d9943542c2071a7e02b167289c303.bindPopup(popup_f6822cb752a3710f777aed2524ac8df4)
+        ;
+
+        
+    
+    
+                marker_536d9943542c2071a7e02b167289c303.setIcon(icon_cfcf124170689af0b462dd0bf56e5f97);
+            
+    
+            var circle_cfd6ef65b0ea54f3a31fbda26be6bc36 = L.circle(
+                [53.8008, -1.5491],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "lightblue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 35000, "stroke": true, "weight": 3}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+        var popup_d176ed5c968c844653ba0b6177b655eb = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_23093358d634490d5544b7ac6dfb48d1 = $(`<div id="html_23093358d634490d5544b7ac6dfb48d1" style="width: 100.0%; height: 100.0%;">Yorkshire Evening Post coverage area</div>`)[0];
+                popup_d176ed5c968c844653ba0b6177b655eb.setContent(html_23093358d634490d5544b7ac6dfb48d1);
+            
+        
+
+        circle_cfd6ef65b0ea54f3a31fbda26be6bc36.bindPopup(popup_d176ed5c968c844653ba0b6177b655eb)
+        ;
+
+        
+    
+    
+            var marker_660227a8be4d85fb1424b3c9baedd54c = L.marker(
+                [51.4545, -2.5879],
+                {
+}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+            var icon_8c38caec854688d5c7ca372354b72f3d = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_c5406388617e17db9be5eb40668d46ae = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_3e4b9661eaa8ab8c50e59e2035525a09 = $(`<div id="html_3e4b9661eaa8ab8c50e59e2035525a09" style="width: 100.0%; height: 100.0%;"><b>Bristol Post</b><br>Coverage: 30km</div>`)[0];
+                popup_c5406388617e17db9be5eb40668d46ae.setContent(html_3e4b9661eaa8ab8c50e59e2035525a09);
+            
+        
+
+        marker_660227a8be4d85fb1424b3c9baedd54c.bindPopup(popup_c5406388617e17db9be5eb40668d46ae)
+        ;
+
+        
+    
+    
+                marker_660227a8be4d85fb1424b3c9baedd54c.setIcon(icon_8c38caec854688d5c7ca372354b72f3d);
+            
+    
+            var circle_a43617832b787e9d823f3245e65a2a79 = L.circle(
+                [51.4545, -2.5879],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "lightblue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 30000, "stroke": true, "weight": 3}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+        var popup_2d20bc8639d8e08eacc361460f4d6cac = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_2215b8030b38b9458da0f9061be9a4a1 = $(`<div id="html_2215b8030b38b9458da0f9061be9a4a1" style="width: 100.0%; height: 100.0%;">Bristol Post coverage area</div>`)[0];
+                popup_2d20bc8639d8e08eacc361460f4d6cac.setContent(html_2215b8030b38b9458da0f9061be9a4a1);
+            
+        
+
+        circle_a43617832b787e9d823f3245e65a2a79.bindPopup(popup_2d20bc8639d8e08eacc361460f4d6cac)
+        ;
+
+        
+    
+    
+            var marker_0362a1df0f41707356b577f72386f729 = L.marker(
+                [54.9783, -1.6178],
+                {
+}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+            var icon_db8b0baa184cf9d4813aeec167255887 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_586c229f5beac1eda80f6ee27893f2ce = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_d9382a349a38c9eb97e04a03c7b29a1e = $(`<div id="html_d9382a349a38c9eb97e04a03c7b29a1e" style="width: 100.0%; height: 100.0%;"><b>Chronicle Live</b><br>Coverage: 40km</div>`)[0];
+                popup_586c229f5beac1eda80f6ee27893f2ce.setContent(html_d9382a349a38c9eb97e04a03c7b29a1e);
+            
+        
+
+        marker_0362a1df0f41707356b577f72386f729.bindPopup(popup_586c229f5beac1eda80f6ee27893f2ce)
+        ;
+
+        
+    
+    
+                marker_0362a1df0f41707356b577f72386f729.setIcon(icon_db8b0baa184cf9d4813aeec167255887);
+            
+    
+            var circle_84a199950f517272ea7665500935303f = L.circle(
+                [54.9783, -1.6178],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "lightblue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 40000, "stroke": true, "weight": 3}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+        var popup_2180a49feb4efa9ce2eae091a9eabc98 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_54e079c29610940415e1541db4cc4b33 = $(`<div id="html_54e079c29610940415e1541db4cc4b33" style="width: 100.0%; height: 100.0%;">Chronicle Live coverage area</div>`)[0];
+                popup_2180a49feb4efa9ce2eae091a9eabc98.setContent(html_54e079c29610940415e1541db4cc4b33);
+            
+        
+
+        circle_84a199950f517272ea7665500935303f.bindPopup(popup_2180a49feb4efa9ce2eae091a9eabc98)
+        ;
+
+        
+    
+    
+            var marker_6aee1dd7967c7440ddedac72657c2b3b = L.marker(
+                [55.8642, -4.2518],
+                {
+}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+            var icon_4a83b8be32f46b041c5e5f76f9f554c9 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_8dca79e6940d2cbc00a9502f2895c5a8 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_06b97a8ea1d0ec9ce59d96bfcb253c83 = $(`<div id="html_06b97a8ea1d0ec9ce59d96bfcb253c83" style="width: 100.0%; height: 100.0%;"><b>The Herald (Glasgow)</b><br>Coverage: 60km</div>`)[0];
+                popup_8dca79e6940d2cbc00a9502f2895c5a8.setContent(html_06b97a8ea1d0ec9ce59d96bfcb253c83);
+            
+        
+
+        marker_6aee1dd7967c7440ddedac72657c2b3b.bindPopup(popup_8dca79e6940d2cbc00a9502f2895c5a8)
+        ;
+
+        
+    
+    
+                marker_6aee1dd7967c7440ddedac72657c2b3b.setIcon(icon_4a83b8be32f46b041c5e5f76f9f554c9);
+            
+    
+            var circle_051772bf4888d40ae3111cda38a72a7e = L.circle(
+                [55.8642, -4.2518],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "lightblue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 60000, "stroke": true, "weight": 3}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+        var popup_a96181162eaf4b738d994de41ddd7a25 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_475344fb58bd2ce5e7837dbc92a53389 = $(`<div id="html_475344fb58bd2ce5e7837dbc92a53389" style="width: 100.0%; height: 100.0%;">The Herald (Glasgow) coverage area</div>`)[0];
+                popup_a96181162eaf4b738d994de41ddd7a25.setContent(html_475344fb58bd2ce5e7837dbc92a53389);
+            
+        
+
+        circle_051772bf4888d40ae3111cda38a72a7e.bindPopup(popup_a96181162eaf4b738d994de41ddd7a25)
+        ;
+
+        
+    
+    
+            var marker_0e508543e164f299f99434e125de0cad = L.marker(
+                [51.4816, -3.1791],
+                {
+}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+            var icon_880f40241be1c5163a10ff0906b8ef8f = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_0deede5443ef432e58ad60ab74a9279f = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_35a55196c307bf21e5abd477891b2125 = $(`<div id="html_35a55196c307bf21e5abd477891b2125" style="width: 100.0%; height: 100.0%;"><b>Wales Online</b><br>Coverage: 50km</div>`)[0];
+                popup_0deede5443ef432e58ad60ab74a9279f.setContent(html_35a55196c307bf21e5abd477891b2125);
+            
+        
+
+        marker_0e508543e164f299f99434e125de0cad.bindPopup(popup_0deede5443ef432e58ad60ab74a9279f)
+        ;
+
+        
+    
+    
+                marker_0e508543e164f299f99434e125de0cad.setIcon(icon_880f40241be1c5163a10ff0906b8ef8f);
+            
+    
+            var circle_6a1cd705e2944e8c4e5467ad1a771aeb = L.circle(
+                [51.4816, -3.1791],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "lightblue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 50000, "stroke": true, "weight": 3}
+            ).addTo(map_e514b59d77d79c8fca9f5f849c3fb942);
+        
+    
+        var popup_8e17a61908a4a1500830f756205bb9f7 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_77f50754c3df8771d27994de037234a6 = $(`<div id="html_77f50754c3df8771d27994de037234a6" style="width: 100.0%; height: 100.0%;">Wales Online coverage area</div>`)[0];
+                popup_8e17a61908a4a1500830f756205bb9f7.setContent(html_77f50754c3df8771d27994de037234a6);
+            
+        
+
+        circle_6a1cd705e2944e8c4e5467ad1a771aeb.bindPopup(popup_8e17a61908a4a1500830f756205bb9f7)
+        ;
+
+        
+    
+</script>
+</html>

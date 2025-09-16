@@ -34,6 +34,7 @@ from src.alert_system import AlertSystem
 from src.unified_data_connector import UnifiedDataConnector
 from src.genai_text_analyzer import GenAITextAnalyzer
 from src.locality_mapper import LocalityMapper
+from src.local_news_analyzer import LocalNewsAnalyzer, get_news_analyzer
 
 # Page configuration
 st.set_page_config(
@@ -102,6 +103,7 @@ def main():
             "📊 Dashboard Overview",
             "🚨 Early Warning System",
             "🗺️ Sentiment & Trust Mapping",
+            "📰 Local News Analyzer",
             "🤝 Good Neighbours Trust Data",
             "📋 Community Life Survey",
             "💡 Intervention Recommendations",
@@ -119,6 +121,8 @@ def main():
         early_warning_page()
     elif page == "🗺️ Sentiment & Trust Mapping":
         sentiment_mapping_page()
+    elif page == "📰 Local News Analyzer":
+        local_news_analyzer_page()
     elif page == "🤝 Good Neighbours Trust Data":
         good_neighbours_page()
     elif page == "📋 Community Life Survey":
@@ -2073,6 +2077,307 @@ def community_survey_page():
                 file_name=f"community_survey_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                 mime="application/json"
             )
+
+def local_news_analyzer_page():
+    """Local news analyzer page with interactive map"""
+    st.header("📰 Local News Analyzer")
+    st.markdown("Click on any area of the map to analyze recent local news, sentiment, and community topics")
+
+    # Initialize news analyzer
+    try:
+        news_analyzer = get_news_analyzer()
+        st.success(f"✅ News analyzer loaded with {len(news_analyzer.news_sources)} UK news sources")
+    except Exception as e:
+        st.error(f"❌ Error loading news analyzer: {e}")
+        return
+
+    # Create two columns - map on left, analysis on right
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.subheader("🗺️ Interactive Coverage Map")
+        st.info("Click anywhere on the map to analyze local news for that area")
+
+        # Quick test buttons
+        st.subheader("🚀 Quick City Analysis")
+        quick_cities = {
+            "📍 London": (51.5074, -0.1278),
+            "📍 Manchester": (53.4808, -2.2426),
+            "📍 Birmingham": (52.4862, -1.8904),
+            "📍 Glasgow": (55.8642, -4.2518)
+        }
+
+        cols = st.columns(len(quick_cities))
+        for i, (city_name, coords) in enumerate(quick_cities.items()):
+            with cols[i]:
+                if st.button(city_name, key=f"city_{i}"):
+                    st.session_state.clicked_coordinates = coords
+                    st.rerun()
+
+        # Create coverage map
+        try:
+            coverage_map = news_analyzer.create_coverage_map()
+
+            if FOLIUM_AVAILABLE:
+                # Display interactive map
+                from streamlit_folium import st_folium
+
+                # Get map data and handle clicks
+                map_data = st_folium(
+                    coverage_map,
+                    width=700,
+                    height=500,
+                    returned_objects=["last_object_clicked", "last_clicked"]
+                )
+
+                # Handle map clicks
+                if map_data['last_clicked'] and map_data['last_clicked']['lat']:
+                    clicked_lat = map_data['last_clicked']['lat']
+                    clicked_lng = map_data['last_clicked']['lng']
+
+                    # Store clicked coordinates in session state
+                    st.session_state.clicked_coordinates = (clicked_lat, clicked_lng)
+
+            else:
+                st.warning("⚠️ Interactive map requires streamlit-folium. Showing static version.")
+                # Show static map HTML in iframe
+                st.components.v1.html(coverage_map._repr_html_(), height=500)
+
+        except Exception as e:
+            st.error(f"Error creating map: {e}")
+
+    with col2:
+        st.subheader("📊 Analysis Results")
+
+        # Check for clicked coordinates
+        if hasattr(st.session_state, 'clicked_coordinates') and st.session_state.clicked_coordinates:
+            lat, lng = st.session_state.clicked_coordinates
+
+            st.info(f"📍 Analyzing location: ({lat:.4f}, {lng:.4f})")
+
+            # Analyze location
+            with st.spinner("🔍 Analyzing local news..."):
+                try:
+                    analysis_result = news_analyzer.analyze_location(lat, lng, f"Area ({lat:.3f}, {lng:.3f})")
+
+                    if 'error' in analysis_result:
+                        st.error(f"❌ {analysis_result['error']}")
+                    else:
+                        # Display comprehensive results
+                        if 'sources_analyzed' in analysis_result:
+                            # New comprehensive format
+                            sources_info = ", ".join([f"**{s['name']}** ({s['articles_found']} articles)"
+                                                    for s in analysis_result['sources_analyzed']])
+                            st.success(f"✅ Analyzed {analysis_result['total_articles']} articles from: {sources_info}")
+
+                            # Most Popular Article (Detailed)
+                            st.subheader("🏆 Most Popular Article")
+                            popular_article = analysis_result['most_popular_article']
+
+                            # Create two columns for image and content
+                            col_img, col_content = st.columns([1, 2])
+
+                            with col_img:
+                                # Display article image if available
+                                if popular_article.get('image_url'):
+                                    try:
+                                        st.image(popular_article['image_url'], use_column_width=True)
+                                    except Exception:
+                                        st.info("📷 Image not available")
+                                else:
+                                    st.info("📷 No image")
+
+                            with col_content:
+                                st.markdown(f"**{popular_article['title']}**")
+
+                                # Traffic analysis metrics
+                                traffic_score = popular_article.get('traffic_score', popular_article.get('popularity_score', 0))
+                                st.metric("Traffic Score", f"{traffic_score:.1f}", help="Higher score indicates more likely to be viewed")
+
+                                st.markdown(f"**Source:** {popular_article['source']}")
+
+                                # Description if available
+                                if popular_article.get('description'):
+                                    st.markdown(f"**Description:** {popular_article['description']}")
+                                else:
+                                    st.markdown(f"**Preview:** {popular_article['content_preview']}")
+
+                                # Link button
+                                st.markdown(f"[🔗 **Read Full Article**]({popular_article['url']})")
+
+                            # Traffic analysis details in expander
+                            traffic_indicators = popular_article.get('traffic_indicators', {})
+                            if traffic_indicators:
+                                with st.expander("📊 Traffic Analysis Details"):
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("Content Quality", f"{traffic_indicators.get('content_quality', 0):.1f}")
+                                    with col2:
+                                        st.metric("Title Engagement", f"{traffic_indicators.get('title_engagement', 0):.1f}")
+                                    with col3:
+                                        st.metric("Base Popularity", traffic_indicators.get('base_popularity', 0))
+
+                            # Analysis results - use detailed analysis for most popular article
+                            analysis = analysis_result['detailed_analysis']
+                            aggregate = analysis_result['aggregate_analysis']
+
+                            # Show confidence level
+                            st.info(f"📊 Analysis Confidence: **{aggregate.get('confidence', 'Medium')}** "
+                                   f"(based on {aggregate.get('articles_analyzed', 1)} articles)")
+
+                        else:
+                            # Fallback to old format
+                            st.success(f"✅ Found news from: **{analysis_result.get('source', 'Unknown')}**")
+                            if 'source_distance' in analysis_result:
+                                st.caption(f"Distance: {analysis_result['source_distance']}km from location")
+
+                            # Article information
+                            st.subheader("📄 Most Recent Article")
+                            article = analysis_result.get('article', {})
+
+                            st.markdown(f"**Title:** {article.get('title', 'N/A')}")
+                            st.markdown(f"**Preview:** {article.get('content_preview', 'N/A')}")
+                            if article.get('url'):
+                                st.markdown(f"[🔗 Read full article]({article['url']})")
+
+                            # Analysis results
+                            analysis = analysis_result.get('analysis', {})
+
+                        # Sentiment and trust scores
+                        st.subheader("💭 Sentiment Analysis")
+
+                        col_sent, col_trust = st.columns(2)
+                        with col_sent:
+                            sentiment = analysis['sentiment_score']
+                            sentiment_color = "🟢" if sentiment > 0.1 else "🔴" if sentiment < -0.1 else "🟡"
+                            st.metric("Sentiment Score", f"{sentiment:.3f}", help="Scale: -1 (negative) to +1 (positive)")
+                            st.markdown(f"{sentiment_color} {'Positive' if sentiment > 0.1 else 'Negative' if sentiment < -0.1 else 'Neutral'}")
+
+                        with col_trust:
+                            trust = analysis['trust_score']
+                            trust_color = "🟢" if trust > 7 else "🟡" if trust > 4 else "🔴"
+                            st.metric("Trust Score", f"{trust:.1f}/10")
+                            st.markdown(f"{trust_color} {'High Trust' if trust > 7 else 'Moderate Trust' if trust > 4 else 'Low Trust'}")
+
+                        # Trust indicators breakdown
+                        st.subheader("🔍 Trust Indicators")
+                        col_pos, col_neg = st.columns(2)
+
+                        with col_pos:
+                            st.metric("Positive Indicators", analysis['positive_indicators'], help="Words suggesting community trust")
+
+                        with col_neg:
+                            st.metric("Negative Indicators", analysis['negative_indicators'], help="Words suggesting community concerns")
+
+                        # AI Agent Analysis Results
+                        if 'agent_analysis' in analysis_result and analysis_result['agent_analysis']:
+                            agent_data = analysis_result['agent_analysis']
+                            if agent_data.get('agent_analysis', False):  # Check if agent was used
+                                st.subheader("🤖 AI Agent Analysis")
+
+                                # Agent analysis summary
+                                if agent_data.get('summary'):
+                                    st.info(agent_data['summary'])
+
+                                # Main topics from agent
+                                if agent_data.get('main_topics'):
+                                    st.markdown("**Key Topics Identified by AI:**")
+                                    topics_display = ", ".join([topic.replace('_', ' ').title() for topic in agent_data['main_topics']])
+                                    st.write(topics_display)
+
+                                # Agent sentiment
+                                if 'overall_sentiment' in agent_data:
+                                    agent_sentiment = agent_data['overall_sentiment']
+                                    st.markdown(f"**AI Sentiment Assessment:** {agent_sentiment.get('description', 'neutral')} "
+                                              f"(Score: {agent_sentiment.get('score', 0):.2f}, "
+                                              f"Confidence: {agent_sentiment.get('confidence', 'medium')})")
+
+                                # Community cohesion insights
+                                if 'community_cohesion' in agent_data:
+                                    cohesion = agent_data['community_cohesion']
+                                    if cohesion.get('recommendations'):
+                                        with st.expander("💡 AI Recommendations"):
+                                            for rec in cohesion['recommendations']:
+                                                st.write(f"• {rec}")
+
+                        # Topic analysis
+                        if analysis['top_topics']:
+                            st.subheader("🏷️ Key Topics Discussed")
+                            for i, topic in enumerate(analysis['top_topics'], 1):
+                                topic_display = topic.replace('_', ' ').title()
+                                mentions = analysis['topic_scores'].get(topic, 0)
+                                st.write(f"{i}. **{topic_display}** ({mentions} mentions)")
+                        else:
+                            st.info("No specific community topics identified in this article")
+
+                        # Word cloud style topic scores
+                        st.subheader("📈 All Topic Mentions")
+                        topic_df = pd.DataFrame([
+                            {"Topic": k.replace('_', ' ').title(), "Mentions": v}
+                            for k, v in analysis['topic_scores'].items()
+                            if v > 0
+                        ])
+
+                        if not topic_df.empty:
+                            fig = px.bar(
+                                topic_df.sort_values('Mentions', ascending=True),
+                                x='Mentions',
+                                y='Topic',
+                                orientation='h',
+                                title="Community Topics in Local News",
+                                color='Mentions',
+                                color_continuous_scale='Blues'
+                            )
+                            fig.update_layout(height=300)
+                            st.plotly_chart(fig, use_container_width=True)
+
+                        # Analysis metadata
+                        st.subheader("ℹ️ Analysis Info")
+                        st.caption(f"Analysis completed: {analysis_result['scraped_at']}")
+                        st.caption(f"Article word count: {analysis['word_count']}")
+
+                        # Clear button
+                        if st.button("🔄 Clear Analysis", help="Click to analyze a new location"):
+                            if hasattr(st.session_state, 'clicked_coordinates'):
+                                delattr(st.session_state, 'clicked_coordinates')
+                                st.rerun()
+
+                except Exception as e:
+                    st.error(f"❌ Analysis failed: {str(e)}")
+                    st.info("This may be due to:")
+                    st.write("• Network connectivity issues")
+                    st.write("• Website blocking automated access")
+                    st.write("• No recent articles available")
+
+        else:
+            st.info("👆 Click anywhere on the map to analyze local news for that area")
+            st.markdown("---")
+
+            # Show available news sources
+            st.subheader("📰 Available News Sources")
+            for source in news_analyzer.news_sources:
+                with st.expander(f"{source['name']} - {source['coverage_radius']}km coverage"):
+                    st.write(f"**Location:** {source['lat']:.4f}, {source['lon']:.4f}")
+                    st.write(f"**Coverage Radius:** {source['coverage_radius']} km")
+                    st.write(f"**Website:** [Visit]({source['url']})")
+
+            # Quick analysis buttons for major cities
+            st.subheader("🏙️ Quick Analysis")
+            st.caption("Or click a button to analyze major UK cities:")
+
+            cities = [
+                ("London", 51.5074, -0.1278),
+                ("Manchester", 53.4808, -2.2426),
+                ("Birmingham", 52.4862, -1.8904),
+                ("Glasgow", 55.8642, -4.2518)
+            ]
+
+            cols = st.columns(len(cities))
+            for i, (city, lat, lon) in enumerate(cities):
+                with cols[i]:
+                    if st.button(f"📍 {city}", key=f"city_{city}"):
+                        st.session_state.clicked_coordinates = (lat, lon)
+                        st.rerun()
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,2 @@
+id,url,title,language,summary,sentiment_label,sentiment_score,topics,entities,error
+56452e5a2ad47098,https://www.heraldscotland.com/politics/holyrood/25471884.glasgow-plan-make-east-ren-folk-pay-clyde-tunnel-will-backfire/,Glasgow plan to make East Ren folk pay for Clyde Tunnel will backfire | The Herald,,,,,,,"Error code: 400 - {'error': {'code': 'BadRequest', 'message': 'API version not supported'}}"
