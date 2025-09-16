@@ -135,9 +135,34 @@ class CommunityLifeSurveyConnector:
                     lad_column = headers[1]  # Column B should be LAD names
                     data_df = data_df.dropna(subset=[lad_column])
                 
-                # Add metadata
-                data_df['question'] = sheet_name  # Use sheet name as question for cleaned data
+                # Add metadata - extract question text
+                # In cleaned data, the first row is headers, the second row contains the actual question
+                # The question text is in the first row below the header (row 1, column 0)
+                question_text = df.iloc[1, 0] if len(df) > 1 and len(df.columns) > 0 else sheet_name
+                question_text = str(question_text) if pd.notna(question_text) else sheet_name
+                
+                # If we still don't have a good question, try the original logic as fallback
+                if question_text.lower() in ['question', 'nan', 'none', ''] or len(question_text) < 10:
+                    # Try to find a more meaningful question text
+                    # Look in the first few rows for text that looks like a question
+                    for row_idx in range(min(5, len(df))):
+                        for col_idx in range(min(3, len(df.columns))):
+                            cell_value = df.iloc[row_idx, col_idx]
+                            if pd.notna(cell_value):
+                                cell_str = str(cell_value).strip()
+                                # Check if this looks like a question (contains question words or is longer)
+                                if (len(cell_str) > 20 and 
+                                    any(word in cell_str.lower() for word in ['how', 'what', 'do you', 'are you', 'satisfied', 'agree', 'trust'])):
+                                    question_text = cell_str
+                                    break
+                        if question_text != sheet_name:
+                            break
+                
+                data_df['question'] = question_text
                 data_df['sheet_name'] = sheet_name
+                
+                # Debug: Show what question text was extracted
+                print(f"  📝 Question extracted: '{question_text[:50]}{'...' if len(question_text) > 50 else ''}'")
                 
                 return data_df
                 

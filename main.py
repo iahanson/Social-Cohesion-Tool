@@ -1220,6 +1220,26 @@ def question_data(question):
         click.echo(f"  {i}. {lad}")
 
 @survey.command()
+def refresh():
+    """Refresh Community Life Survey data to pick up updated question text"""
+    from src.unified_data_connector import UnifiedDataConnector
+    
+    click.echo("🔄 Refreshing Community Life Survey Data")
+    click.echo("=" * 50)
+    
+    connector = UnifiedDataConnector()
+    connector.refresh_community_survey_data()
+    
+    # Show updated questions
+    questions = connector.get_all_survey_questions()
+    click.echo(f"\n📋 Updated Questions ({len(questions)} total):")
+    for i, question in enumerate(questions[:10], 1):  # Show first 10
+        click.echo(f"  {i}. {question}")
+    
+    if len(questions) > 10:
+        click.echo(f"  ... and {len(questions) - 10} more questions")
+
+@survey.command()
 def clean():
     """Clean Community Life Survey data by removing header rows"""
     import subprocess

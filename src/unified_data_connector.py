@@ -1082,3 +1082,24 @@ class UnifiedDataConnector:
             })
         
         return top_questions
+    
+    def get_all_survey_questions(self) -> List[str]:
+        """Get all unique survey questions"""
+        if self.community_survey_data is None:
+            return []
+        
+        unique_questions = self.community_survey_data['question'].unique()
+        return sorted(unique_questions.tolist())
+    
+    def refresh_community_survey_data(self):
+        """Refresh Community Life Survey data to pick up updated question text"""
+        if self.community_survey_connector:
+            print("🔄 Refreshing Community Life Survey data...")
+            # Force reload by clearing the cache
+            self.community_survey_connector._data_loaded = False
+            self.community_survey_connector.survey_data = {}
+            # Reload all sheets
+            self.community_survey_connector.load_all_sheets()
+            # Process the data to extract question text
+            self.community_survey_data = self.community_survey_connector.process_all_sheets()
+            print(f"✅ Community Life Survey data refreshed: {len(self.community_survey_data)} rows")

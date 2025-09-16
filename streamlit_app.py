@@ -13,6 +13,7 @@ import folium
 import json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from typing import Dict, Any, List, Optional
 
 # Load environment variables from .env file
 load_dotenv()
@@ -24,6 +25,14 @@ try:
 except ImportError:
     FOLIUM_AVAILABLE = False
     st.warning("streamlit-folium not installed. Maps will be displayed as static images. Install with: pip install streamlit-folium")
+
+# Try to import geopandas for LAD boundaries
+try:
+    import geopandas as gpd
+    GEOPANDAS_AVAILABLE = True
+except ImportError:
+    GEOPANDAS_AVAILABLE = False
+    st.warning("geopandas not available. LAD boundaries will be disabled.")
 
 # Import our custom modules
 from src.early_warning_system import EarlyWarningSystem
@@ -88,6 +97,278 @@ if 'engagement_simulator' not in st.session_state:
 if 'alert_system' not in st.session_state:
     st.session_state.alert_system = AlertSystem()
 
+def find_lad_by_coordinates(clicked_coords: List[float], lads_gdf) -> Optional[str]:
+    """Find which LAD contains the clicked coordinates"""
+    try:
+        from shapely.geometry import Point
+        
+        if not clicked_coords or len(clicked_coords) < 2:
+            return None
+        
+        click_point = Point(clicked_coords[1], clicked_coords[0])  # lat, lon
+        
+        # Check which LAD geometry contains this point
+        for idx, row in lads_gdf.iterrows():
+            if row.geometry.contains(click_point):
+                # Find the LAD name column
+                for col in ['LAD24NM', 'LAD23NM', 'LAD22NM', 'LAD_NAME', 'Name', 'LADNM', 'LAD_NM', 'NAME']:
+                    if col in row:
+                        return row[col]
+        return None
+    except Exception as e:
+        st.write(f"🔍 Debug - Error finding LAD by coordinates: {e}")
+        return None
+
+def get_lad_comprehensive_data(lad_name: str, connector) -> Dict[str, Any]:
+    """Get comprehensive data for a specific LAD from all available sources"""
+    data = {
+        'lad_name': lad_name,
+        'imd_data': None,
+        'good_neighbours_data': None,
+        'population_data': None,
+        'community_survey_data': None,
+        'msoa_count': 0,
+        'lsoa_count': 0
+    }
+    
+    try:
+        # Get Community Life Survey data for this LAD
+        if connector.community_survey_data is not None:
+            lad_column = connector.community_survey_data.columns[1]  # Column B should be LAD names
+            lad_survey_data = connector.community_survey_data[connector.community_survey_data[lad_column] == lad_name]
+            if not lad_survey_data.empty:
+                data['community_survey_data'] = lad_survey_data
+        
+        # Get MSOA-level data for this LAD
+        if connector.msoa_population_data is not None:
+            # Filter MSOAs that belong to this LAD
+            lad_msoas = connector.msoa_population_data[connector.msoa_population_data['msoa_name'] == lad_name]
+            data['msoa_count'] = len(lad_msoas)
+            
+            if not lad_msoas.empty:
+                data['population_data'] = lad_msoas
+                
+                # Get IMD data for these MSOAs
+                if connector.imd_data is not None:
+                    msoa_codes = lad_msoas['msoa_code'].tolist()
+                    lad_imd_data = connector.imd_data[connector.imd_data['msoa_code'].isin(msoa_codes)]
+                    if not lad_imd_data.empty:
+                        data['imd_data'] = lad_imd_data
+                
+                # Get Good Neighbours data for these MSOAs
+                if connector.good_neighbours_data is not None:
+                    msoa_codes = lad_msoas['msoa_code'].tolist()
+                    lad_gn_data = connector.good_neighbours_data[connector.good_neighbours_data['msoa_code'].isin(msoa_codes)]
+                    if not lad_gn_data.empty:
+                        data['good_neighbours_data'] = lad_gn_data
+        
+        # Estimate LSOA count (roughly 4-8 LSOAs per MSOA)
+        data['lsoa_count'] = data['msoa_count'] * 6  # Average estimate
+        
+    except Exception as e:
+        st.error(f"Error getting data for {lad_name}: {e}")
+    
+    return data
+
+def create_interactive_uk_map():
+    """Create an interactive UK map with LAD boundaries and risk choropleth using Folium and GeoPandas"""
+    if not FOLIUM_AVAILABLE or not GEOPANDAS_AVAILABLE:
+        st.error("Folium or GeoPandas not available. Cannot create interactive map.")
+        return None, None
+    
+    try:
+        # Use CSV file directly since GeoJSON has invalid geometries
+        csv_path = 'data/Local_Authority_Districts_May_2023.csv'
+        
+        try:
+            df = pd.read_csv(csv_path)
+            
+            # Create circular boundaries around each LAD center point
+            # This will create realistic-looking LAD boundaries
+            from shapely.geometry import Point
+            import numpy as np
+            
+            # Create circular boundaries with varying sizes based on area
+            geometries = []
+            for idx, row in df.iterrows():
+                center = Point(row['LONG'], row['LAT'])
+                
+                # Calculate radius based on area (if available) or use default
+                if 'Shape__Area' in df.columns:
+                    # Convert area to approximate radius (assuming roughly circular)
+                    area = row['Shape__Area']
+                    radius = np.sqrt(area / np.pi) * 0.00001  # Scale factor for map coordinates
+                    radius = max(0.01, min(0.05, radius))  # Clamp between reasonable bounds
+                else:
+                    radius = 0.02  # Default radius
+                
+                # Create a circle around the center point
+                circle = center.buffer(radius)
+                geometries.append(circle)
+            
+            # Create GeoDataFrame with circular boundaries
+            lads = gpd.GeoDataFrame(df, geometry=geometries, crs='EPSG:4326')
+            
+        except Exception as e:
+            st.error(f"Failed to load CSV data: {e}")
+            import traceback
+            st.error(f"Traceback: {traceback.format_exc()}")
+            return None
+        
+        # Initialize a folium map centered on the UK
+        m = folium.Map(
+            location=[54.5, -3], 
+            zoom_start=5, 
+            tiles='cartodbpositron'
+        )
+        
+        
+        # Add LAD boundaries
+        if lads is not None:
+            # Determine the LAD name column - check all possible column names
+            lad_name_col = None
+            possible_cols = ['LAD24NM', 'LAD23NM', 'LAD22NM', 'LAD_NAME', 'Name', 'LADNM', 'LAD_NM', 'NAME']
+            
+            for col in possible_cols:
+                if col in lads.columns:
+                    lad_name_col = col
+                    break
+            
+            if lad_name_col:
+                # Generate sample risk data for demonstration
+                # In a real implementation, this would come from your early warning system
+                np.random.seed(42)  # For consistent results
+                lads['risk_score'] = np.random.uniform(0, 1, len(lads))
+                lads['risk_level'] = lads['risk_score'].apply(
+                    lambda x: 'Critical' if x >= 0.8 else 'High' if x >= 0.6 else 'Medium' if x >= 0.4 else 'Low'
+                )
+                
+                
+                # Define color mapping for risk levels
+                def get_risk_color(risk_level):
+                    color_map = {
+                        'Low': '#2E8B57',      # Sea Green
+                        'Medium': '#FFD700',    # Gold
+                        'High': '#FF8C00',      # Dark Orange
+                        'Critical': '#DC143C'   # Crimson
+                    }
+                    return color_map.get(risk_level, '#808080')  # Default gray
+                
+                # Check if we have valid geometries
+                valid_count = lads.geometry.is_valid.sum()
+                
+                if valid_count == 0:
+                    st.error("❌ No valid geometries found!")
+                    return m
+                
+                # Try a simpler approach first - just add basic boundaries
+                try:
+                    # Add basic LAD boundaries first
+                    folium.GeoJson(
+                        lads,
+                        name='LAD Boundaries (Basic)',
+                        style_function=lambda x: {
+                            'color': 'red',
+                            'weight': 3,
+                            'fillOpacity': 0.5,
+                            'fillColor': 'yellow'
+                        }
+                    ).add_to(m)
+                    
+                    # Now try the risk choropleth with improved click handling
+                    geojson_layer = folium.GeoJson(
+                        lads,
+                        name='LAD Risk Choropleth',
+                        style_function=lambda feature: {
+                            'color': '#000000',
+                            'weight': 2,
+                            'fillOpacity': 0.7,
+                            'fillColor': get_risk_color(feature['properties']['risk_level'])
+                        },
+                        tooltip=folium.features.GeoJsonTooltip(
+                            fields=[lad_name_col, 'risk_score', 'risk_level'], 
+                            aliases=['LAD Name', 'Risk Score', 'Risk Level']
+                        ),
+                        popup=folium.features.GeoJsonPopup(
+                            fields=[lad_name_col, 'risk_score', 'risk_level'],
+                            aliases=['LAD Name', 'Risk Score', 'Risk Level'],
+                            localize=True,
+                            labels=True
+                        )
+                    )
+                    
+                    # Add click event handler
+                    geojson_layer.add_child(
+                        folium.ClickForMarker(
+                            popup=f"Clicked LAD: {lad_name_col}"
+                        )
+                    )
+                    
+                    geojson_layer.add_to(m)
+                    
+                except Exception as e:
+                    st.error(f"❌ Error adding LAD boundaries: {e}")
+                    import traceback
+                    st.error(f"Traceback: {traceback.format_exc()}")
+                    
+                    # Try even simpler approach
+                    try:
+                        st.info("🔄 Trying fallback approach...")
+                        folium.GeoJson(
+                            lads,
+                            name='LAD Fallback',
+                            style_function=lambda x: {
+                                'color': 'blue',
+                                'weight': 1,
+                                'fillOpacity': 0.3,
+                                'fillColor': 'lightblue'
+                            }
+                        ).add_to(m)
+                    except Exception as e2:
+                        st.error(f"❌ Fallback also failed: {e2}")
+                
+                # Add legend with better sizing
+                legend_html = '''
+                <div style="position: fixed; 
+                            bottom: 50px; left: 50px; width: 220px; height: 140px; 
+                            background-color: white; border:2px solid grey; z-index:9999; 
+                            font-size:12px; padding: 12px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.2)">
+                <p style="margin: 0 0 8px 0; font-weight: bold; font-size: 14px;">Risk Level Legend</p>
+                <p style="margin: 4px 0; line-height: 1.3;"><span style="display: inline-block; width: 12px; height: 12px; background-color: #2E8B57; margin-right: 8px;"></span> Low Risk (0.0-0.4)</p>
+                <p style="margin: 4px 0; line-height: 1.3;"><span style="display: inline-block; width: 12px; height: 12px; background-color: #FFD700; margin-right: 8px;"></span> Medium Risk (0.4-0.6)</p>
+                <p style="margin: 4px 0; line-height: 1.3;"><span style="display: inline-block; width: 12px; height: 12px; background-color: #FF8C00; margin-right: 8px;"></span> High Risk (0.6-0.8)</p>
+                <p style="margin: 4px 0; line-height: 1.3;"><span style="display: inline-block; width: 12px; height: 12px; background-color: #DC143C; margin-right: 8px;"></span> Critical Risk (0.8-1.0)</p>
+                </div>
+                '''
+                m.get_root().html.add_child(folium.Element(legend_html))
+                
+                
+            else:
+                st.error(f"Could not find LAD name column. Available columns: {list(lads.columns)}")
+                # Add boundaries without tooltips as fallback
+                folium.GeoJson(
+                    lads,
+                    name='LAD Boundaries',
+                    style_function=lambda x: {
+                        'color': '#000000',
+                        'weight': 2,
+                        'fillOpacity': 0.3,
+                        'fillColor': 'lightblue'
+                    }
+                ).add_to(m)
+        
+        # Add layer control
+        folium.LayerControl().add_to(m)
+        
+        
+        return m, lads
+        
+    except Exception as e:
+        st.error(f"Error creating interactive map: {e}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
+        return None, None
+
 def main():
     """Main application function"""
     
@@ -96,21 +377,42 @@ def main():
     
     # Sidebar navigation
     st.sidebar.title("Navigation")
+    
+    # Initialize page in session state if not exists
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = "📊 Dashboard Overview"
+    
+    page_options = [
+        "📊 Dashboard Overview",
+        "🚨 Early Warning System",
+        "🗺️ Sentiment & Trust Mapping",
+        "🤝 Good Neighbours Trust Data",
+        "📋 Community Life Survey",
+        "💡 Intervention Recommendations",
+        "🎯 Engagement Simulator",
+        "📧 Alert Management",
+        "🤖 GenAI Text Analysis",
+        "⚙️ System Settings"
+    ]
+    
+    try:
+        current_index = page_options.index(st.session_state.current_page)
+    except ValueError:
+        current_index = 0
+    
+    # Use a session state-based key that's stable
+    if 'nav_key' not in st.session_state:
+        st.session_state.nav_key = f"main_nav_{len(page_options)}"
+    
     page = st.sidebar.selectbox(
         "Choose a component:",
-        [
-            "📊 Dashboard Overview",
-            "🚨 Early Warning System",
-            "🗺️ Sentiment & Trust Mapping",
-            "🤝 Good Neighbours Trust Data",
-            "📋 Community Life Survey",
-            "💡 Intervention Recommendations",
-            "🎯 Engagement Simulator",
-            "📧 Alert Management",
-            "🤖 GenAI Text Analysis",
-            "⚙️ System Settings"
-        ]
+        page_options,
+        key=st.session_state.nav_key,
+        index=current_index
     )
+    
+    # Update session state
+    st.session_state.current_page = page
     
     # Route to appropriate page
     if page == "📊 Dashboard Overview":
@@ -152,6 +454,9 @@ def dashboard_overview():
         # Good Neighbours social trust data
         gn_data = st.session_state.unified_data_connector.load_good_neighbours_data()
         gn_summary = st.session_state.unified_data_connector.get_good_neighbours_summary()
+        
+        # Community Life Survey data for LAD-level insights
+        survey_data = st.session_state.unified_data_connector.get_community_survey_data()
     
     # Key metrics
     col1, col2, col3, col4, col5, col6 = st.columns(6)
@@ -206,131 +511,489 @@ def dashboard_overview():
             delta=f"{ew_data['summary']['anomalous_areas']} anomalies"
         )
     
-    # Charts
+    # Data Source Status
+    st.subheader("📋 Data Source Status")
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("Risk Level Distribution")
-        risk_data = ew_data['data']['risk_level'].value_counts()
-        fig = px.pie(
-            values=risk_data.values,
-            names=risk_data.index,
-            color_discrete_map={
-                'Low': '#4caf50',
-                'Medium': '#ff9800',
-                'High': '#ff5722',
-                'Critical': '#f44336'
-            }
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("""
+        **✅ Available Data Sources:**
+        - Good Neighbours Survey Data
+        - Index of Multiple Deprivation (IMD)
+        - Population Demographics (Census 2022)
+        - Community Life Survey 2023-24
+        - Early Warning System Indicators
+        """)
     
     with col2:
-        st.subheader("Trust vs Deprivation")
-        fig = px.scatter(
-            sm_data['data'],
-            x='deprivation_composite',
-            y='social_trust_composite',
-            color='local_authority',
-            hover_data=['msoa_name', 'msoa_code'],
-            title="Social Trust vs Deprivation by Local Authority"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("""
+        **📊 Analysis Capabilities:**
+        - Social Trust Analysis
+        - Risk Assessment Mapping
+        - Demographic Insights
+        - Community Survey Analysis
+        - Early Warning Indicators
+        """)
     
-    # Risk Assessment Summary
-    st.subheader("🚨 Risk Assessment Summary")
+    # Quick Actions
+    st.subheader("🚀 Quick Actions")
     
-    # Quick action buttons
     col1, col2, col3 = st.columns(3)
+    
     with col1:
-        if st.button("🔄 Refresh Risk Assessment", help="Re-run risk assessment with latest data"):
+        if st.button("📊 View Social Trust Analysis", use_container_width=True):
+            st.session_state.page = "Social Trust Analysis"
             st.rerun()
+    
     with col2:
-        if st.button("📊 View Detailed Analysis", help="Go to detailed risk assessment page"):
-            st.session_state.page = "🚨 Early Warning System"
+        if st.button("📋 Explore Community Survey", use_container_width=True):
+            st.session_state.page = "Community Life Survey"
             st.rerun()
+    
     with col3:
-        if st.button("📈 Export Risk Data", help="Download risk assessment data"):
-            # Create downloadable CSV
-            csv_data = ew_data['data'][['msoa_code', 'local_authority', 'risk_score', 'risk_level', 
-                                       'unemployment_rate', 'crime_rate', 'social_trust_score', 
-                                       'community_cohesion']].to_csv(index=False)
-            st.download_button(
-                label="Download Risk Assessment Data",
-                data=csv_data,
-                file_name=f"risk_assessment_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
+        if st.button("🚨 Early Warning System", use_container_width=True):
+            st.session_state.page = "Early Warning System"
+            st.rerun()
     
-    # Risk score distribution
-    col1, col2 = st.columns(2)
+    # Interactive UK Map
+    st.subheader("🗺️ UK Local Authority Districts")
     
-    with col1:
-        st.subheader("Risk Score Distribution")
-        fig = px.histogram(
-            ew_data['data'],
-            x='risk_score',
-            nbins=20,
-            title="Risk Score Distribution Across All Areas",
-            labels={'risk_score': 'Risk Score', 'count': 'Number of Areas'},
-            color_discrete_sequence=['#1f77b4']
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("Top Risk Areas")
-        top_risk_areas = ew_data['data'].nlargest(5, 'risk_score')[
-            ['msoa_code', 'local_authority', 'risk_score', 'risk_level']
-        ]
-        
-        # Display as a styled table
-        for idx, row in top_risk_areas.iterrows():
-            risk_color = {
-                'Low': '#4caf50',
-                'Medium': '#ff9800', 
-                'High': '#ff5722',
-                'Critical': '#f44336'
-            }.get(row['risk_level'], '#666666')
+    if FOLIUM_AVAILABLE and GEOPANDAS_AVAILABLE:
+        with st.spinner("Loading interactive map..."):
+            interactive_map, lads_data = create_interactive_uk_map()
             
-            st.markdown(f"""
-            <div class="metric-card" style="border-left-color: {risk_color}; margin-bottom: 0.5rem;">
-                <strong>{row['msoa_code']}</strong> - {row['local_authority']}<br>
-                Risk Score: {row['risk_score']:.3f} | Level: {row['risk_level']}
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Recent alerts
-    st.subheader("🚨 Recent Alerts")
-    if ew_data['alerts']:
-        for alert in ew_data['alerts'][:5]:  # Show top 5 alerts
-            priority_class = f"alert-{alert['priority'].lower()}"
-            st.markdown(f"""
-            <div class="metric-card {priority_class}">
-                <strong>{alert['type']}</strong> - {alert['priority']} Priority<br>
-                MSOA: {alert['msoa_code']} | LA: {alert['local_authority']}<br>
-                {alert['message']}
-            </div>
-            """, unsafe_allow_html=True)
+        if interactive_map is not None:
+            # Display the interactive map - made bigger
+            map_data = st_folium(interactive_map, width=900, height=600, key="uk_map")
+            
+            # Check if a LAD was clicked on the map
+            selected_lad_from_map = None
+            
+            # Method 1: Try GeoJSON object click detection
+            if map_data and 'last_object_clicked' in map_data:
+                clicked_data = map_data['last_object_clicked']
+                if clicked_data and 'properties' in clicked_data:
+                    properties = clicked_data['properties']
+                    # Try to find the LAD name in the properties
+                    for col in ['LAD24NM', 'LAD23NM', 'LAD22NM', 'LAD_NAME', 'Name', 'LADNM', 'LAD_NM', 'NAME']:
+                        if col in properties:
+                            selected_lad_from_map = properties[col]
+                            break
+            
+            # Method 2: Try coordinate-based detection if Method 1 fails
+            if not selected_lad_from_map and map_data and 'last_clicked' in map_data and lads_data is not None:
+                clicked_coords = map_data['last_clicked']
+                if clicked_coords:
+                    selected_lad_from_map = find_lad_by_coordinates(clicked_coords, lads_data)
+            
+            # If a LAD was clicked on the map, store it in session state
+            if selected_lad_from_map:
+                st.session_state.selected_lad_from_map = selected_lad_from_map
+                st.success(f"📍 Map Selection: {selected_lad_from_map}")
+            
+            # LAD Selection
+            st.subheader("🔍 Select a Local Authority District")
+            st.write("**Click on any LAD boundary on the map above, or choose from the dropdown below:**")
+            
+            # Get list of available LADs from the data
+            available_lads = []
+            if st.session_state.unified_data_connector.msoa_population_data is not None:
+                available_lads = sorted(st.session_state.unified_data_connector.msoa_population_data['msoa_name'].unique().tolist())
+            
+            if available_lads:
+                # Determine the default selection (from map click or previous selection)
+                default_index = 0  # Default to empty selection
+                if hasattr(st.session_state, 'selected_lad_from_map') and st.session_state.selected_lad_from_map in available_lads:
+                    default_index = available_lads.index(st.session_state.selected_lad_from_map) + 1
+                elif hasattr(st.session_state, 'selected_lad') and st.session_state.selected_lad in available_lads:
+                    default_index = available_lads.index(st.session_state.selected_lad) + 1
+                
+                selected_lad_manual = st.selectbox(
+                    "Select a Local Authority District:",
+                    options=[""] + available_lads,
+                    index=default_index,
+                    key="manual_lad_selection"
+                )
+                
+                if selected_lad_manual:
+                    st.session_state.selected_lad = selected_lad_manual
+                    st.success(f"📍 Selected: {selected_lad_manual}")
+                    
+                    # Get comprehensive data for the selected LAD
+                    with st.spinner(f"Loading data for {selected_lad_manual}..."):
+                        lad_data = get_lad_comprehensive_data(selected_lad_manual, st.session_state.unified_data_connector)
+                    
+                    # Display LAD data in tabs
+                    st.subheader(f"📊 Data for {selected_lad_manual}")
+                    
+                    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Overview", "🏘️ Population", "📊 IMD Data", "🤝 Social Trust", "📋 Community Survey"])
+                    
+                    with tab1:
+                        st.markdown(f"""
+                        **Geographic Information:**
+                        - **LAD Name:** {lad_data['lad_name']}
+                        - **MSOA Count:** {lad_data['msoa_count']} (Middle Layer Super Output Areas)
+                        - **Estimated LSOA Count:** {lad_data['lsoa_count']} (Lower Layer Super Output Areas)
+                        """)
+                        
+                        if lad_data['msoa_count'] == 0:
+                            st.warning("⚠️ No MSOA-level data available for this LAD")
+                        else:
+                            st.success(f"✅ Data available for {lad_data['msoa_count']} MSOAs")
+                    
+                    with tab2:
+                        if lad_data['population_data'] is not None:
+                            st.subheader("Population Demographics")
+                            pop_data = lad_data['population_data']
+                            
+                            # Display key population metrics
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                total_pop = pop_data['total_population'].sum()
+                                st.metric("Total Population", f"{total_pop:,}")
+                            with col2:
+                                avg_pop_per_msoa = pop_data['total_population'].mean()
+                                st.metric("Avg Population per MSOA", f"{avg_pop_per_msoa:,.0f}")
+                            with col3:
+                                st.metric("Number of MSOAs", len(pop_data))
+                            
+                            # Display detailed population data
+                            st.subheader("Detailed Population Data by MSOA")
+                            st.dataframe(pop_data, use_container_width=True)
+                        else:
+                            st.warning("⚠️ No population data available for this LAD")
+                    
+                    with tab3:
+                        if lad_data['imd_data'] is not None:
+                            st.subheader("Index of Multiple Deprivation (IMD) Data")
+                            imd_data = lad_data['imd_data']
+                            
+                            # Display key IMD metrics
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                avg_decile = imd_data['msoa_imd_decile'].mean()
+                                st.metric("Average IMD Decile", f"{avg_decile:.1f}")
+                            with col2:
+                                min_decile = imd_data['msoa_imd_decile'].min()
+                                st.metric("Most Deprived MSOA", f"Decile {min_decile}")
+                            with col3:
+                                max_decile = imd_data['msoa_imd_decile'].max()
+                                st.metric("Least Deprived MSOA", f"Decile {max_decile}")
+                            
+                            # Display detailed IMD data
+                            st.subheader("Detailed IMD Data by MSOA")
+                            st.dataframe(imd_data, use_container_width=True)
+                        else:
+                            st.warning("⚠️ No IMD data available for this LAD")
+                    
+                    with tab4:
+                        if lad_data['good_neighbours_data'] is not None:
+                            st.subheader("Good Neighbours Social Trust Data")
+                            gn_data = lad_data['good_neighbours_data']
+                            
+                            # Display key trust metrics
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                avg_trust = gn_data['net_trust'].mean()
+                                st.metric("Average Net Trust", f"{avg_trust:.2f}")
+                            with col2:
+                                positive_trust = (gn_data['net_trust'] > 0).sum()
+                                st.metric("MSOA with Positive Trust", f"{positive_trust}/{len(gn_data)}")
+                            with col3:
+                                avg_always_trust = gn_data['always_usually_trust'].mean()
+                                st.metric("Average 'Always/Usually Trust'", f"{avg_always_trust:.1f}%")
+                            
+                            # Display detailed trust data
+                            st.subheader("Detailed Social Trust Data by MSOA")
+                            st.dataframe(gn_data, use_container_width=True)
+                        else:
+                            st.warning("⚠️ No Good Neighbours social trust data available for this LAD")
+                    
+                    with tab5:
+                        if lad_data['community_survey_data'] is not None:
+                            st.subheader("Community Life Survey Data")
+                            survey_data = lad_data['community_survey_data']
+                            
+                            # Display survey summary
+                            st.markdown(f"""
+                            **Survey Information:**
+                            - **Total Responses:** {len(survey_data)}
+                            - **Questions Covered:** {survey_data['question'].nunique()}
+                            """)
+                            
+                            # Display detailed survey data
+                            st.subheader("Detailed Community Life Survey Data")
+                            st.dataframe(survey_data, use_container_width=True)
+                        else:
+                            st.warning("⚠️ No Community Life Survey data available for this LAD")
+            else:
+                st.warning("⚠️ No LAD data available for manual selection")
+            
+            # Map information
+            st.info("""
+            **Interactive Map Features:**
+            - Click and drag to pan around the UK
+            - Use mouse wheel to zoom in/out
+            - **Click on any LAD boundary to select it and populate the dropdown below**
+            - Hover over LAD boundaries to see names and risk levels
+            - Use layer control to toggle map layers
+            - **Selected LAD will automatically populate the dropdown and show detailed data**
+            """)
+        else:
+            st.error("Failed to create interactive map. Please check the data files.")
     else:
-        st.info("No recent alerts")
+        st.warning("Interactive mapping requires Folium and GeoPandas. Please install: pip install folium geopandas streamlit-folium")
 
 def early_warning_page():
     """Early warning system page"""
     st.header("🚨 Early Warning System")
     
-    # Controls
-    col1, col2 = st.columns(2)
+    # Run early warning analysis
+    with st.spinner("Running early warning analysis..."):
+        ew_data = st.session_state.early_warning_system.run_full_analysis()
+    
+    # Key metrics
+    st.subheader("📊 System Overview")
+    
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        analysis_type = st.selectbox(
-            "Analysis Type:",
-            ["Full Analysis", "Risk Assessment", "Anomaly Detection", "Area Profile"]
+        st.metric(
+            label="Total Areas Monitored",
+            value=ew_data['summary']['total_areas'],
+            delta=f"{ew_data['summary']['critical_risk_areas']} critical"
         )
     
     with col2:
-        if analysis_type == "Area Profile":
-            msoa_code = st.text_input("MSOA Code:", value="E02000001")
-        else:
-            n_areas = st.slider("Number of Areas:", 10, 200, 100)
+        avg_risk = ew_data['data']['risk_score'].mean()
+        st.metric(
+            label="Average Risk Score",
+            value=f"{avg_risk:.3f}",
+            delta=f"{'High' if avg_risk > 0.6 else 'Medium' if avg_risk > 0.3 else 'Low'} Risk"
+        )
+    
+    with col3:
+        st.metric(
+            label="Anomalous Areas",
+            value=ew_data['summary']['anomalous_areas'],
+            delta=f"{ew_data['summary']['total_alerts']} alerts"
+        )
+    
+    with col4:
+        st.metric(
+            label="Risk Clusters",
+            value=ew_data['summary']['risk_clusters'],
+            delta=f"{ew_data['summary']['cluster_sizes']['large']} large"
+        )
+    
+    # Risk level distribution
+    st.subheader("📈 Risk Level Distribution")
+    
+    risk_dist = ew_data['data']['risk_level'].value_counts()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Pie chart of risk levels
+        fig_pie = px.pie(
+            values=risk_dist.values,
+            names=risk_dist.index,
+            title="Risk Level Distribution",
+            color_discrete_map={
+                'Low': '#2E8B57',
+                'Medium': '#FFD700', 
+                'High': '#FF8C00',
+                'Critical': '#DC143C'
+            }
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+    
+    with col2:
+        # Bar chart of risk levels
+        fig_bar = px.bar(
+            x=risk_dist.index,
+            y=risk_dist.values,
+            title="Risk Level Counts",
+            color=risk_dist.index,
+            color_discrete_map={
+                'Low': '#2E8B57',
+                'Medium': '#FFD700',
+                'High': '#FF8C00', 
+                'Critical': '#DC143C'
+            }
+        )
+        fig_bar.update_layout(showlegend=False)
+        st.plotly_chart(fig_bar, use_container_width=True)
+    
+    # High-risk areas table
+    st.subheader("🚨 High-Risk Areas")
+    
+    high_risk_data = ew_data['data'][ew_data['data']['risk_level'].isin(['High', 'Critical'])]
+    high_risk_data = high_risk_data.sort_values('risk_score', ascending=False)
+    
+    if not high_risk_data.empty:
+        # Display key columns
+        display_cols = ['msoa_code', 'msoa_name', 'risk_score', 'risk_level', 'anomaly_score']
+        if 'unemployment_rate' in high_risk_data.columns:
+            display_cols.append('unemployment_rate')
+        if 'crime_rate' in high_risk_data.columns:
+            display_cols.append('crime_rate')
+        if 'social_trust_score' in high_risk_data.columns:
+            display_cols.append('social_trust_score')
+        
+        available_cols = [col for col in display_cols if col in high_risk_data.columns]
+        
+        st.dataframe(
+            high_risk_data[available_cols],
+            use_container_width=True,
+            height=400
+        )
+        
+        # Download button
+        csv = high_risk_data[available_cols].to_csv(index=False)
+        st.download_button(
+            label="📥 Download High-Risk Areas Data",
+            data=csv,
+            file_name=f"high_risk_areas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+    else:
+        st.info("✅ No high-risk areas detected")
+    
+    # Anomaly detection results
+    st.subheader("🔍 Anomaly Detection")
+    
+    anomalous_data = ew_data['data'][ew_data['data']['is_anomaly'] == True]
+    
+    if not anomalous_data.empty:
+        st.warning(f"⚠️ {len(anomalous_data)} anomalous areas detected")
+        
+        # Anomaly scatter plot
+        fig_scatter = px.scatter(
+            anomalous_data,
+            x='risk_score',
+            y='anomaly_score',
+            color='risk_level',
+            hover_data=['msoa_code', 'msoa_name'],
+            title="Anomalous Areas: Risk Score vs Anomaly Score",
+            color_discrete_map={
+                'Low': '#2E8B57',
+                'Medium': '#FFD700',
+                'High': '#FF8C00',
+                'Critical': '#DC143C'
+            }
+        )
+        st.plotly_chart(fig_scatter, use_container_width=True)
+        
+        # Anomalous areas table
+        st.subheader("📋 Anomalous Areas Details")
+        anomaly_cols = ['msoa_code', 'msoa_name', 'risk_score', 'anomaly_score', 'risk_level']
+        available_anomaly_cols = [col for col in anomaly_cols if col in anomalous_data.columns]
+        
+        st.dataframe(
+            anomalous_data[available_anomaly_cols],
+            use_container_width=True
+        )
+    else:
+        st.success("✅ No anomalous areas detected")
+    
+    # Risk factors analysis
+    st.subheader("📊 Risk Factors Analysis")
+    
+    # Get top risk factors
+    risk_factors = ew_data.get('risk_factors', {})
+    
+    if risk_factors:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Top Risk Factors:**")
+            for factor, score in risk_factors.get('top_risk_factors', [])[:5]:
+                st.write(f"• {factor}: {score:.3f}")
+        
+        with col2:
+            st.markdown("**Protective Factors:**")
+            for factor, score in risk_factors.get('protective_factors', [])[:5]:
+                st.write(f"• {factor}: {score:.3f}")
+    
+    # Recommendations
+    st.subheader("💡 Recommendations")
+    
+    recommendations = ew_data.get('recommendations', [])
+    
+    if recommendations:
+        for i, rec in enumerate(recommendations, 1):
+            st.write(f"{i}. {rec}")
+    else:
+        st.info("No specific recommendations available at this time")
+    
+    # Alert system status
+    st.subheader("📧 Alert System Status")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Active Alerts", ew_data['summary']['total_alerts'])
+    
+    with col2:
+        st.metric("Email Alerts", "Configured" if st.session_state.alert_system.email_username else "Not Configured")
+    
+    with col3:
+        st.metric("SMS Alerts", "Configured" if st.session_state.alert_system.twilio_account_sid else "Not Configured")
+    
+    # System settings
+    with st.expander("⚙️ System Settings"):
+        st.markdown("**Risk Thresholds:**")
+        st.write(f"• Critical Risk: {st.session_state.early_warning_system.risk_threshold}")
+        st.write(f"• Anomaly Detection: {st.session_state.early_warning_system.anomaly_detector.contamination}")
+        
+        st.markdown("**Data Sources:**")
+        st.write("• IMD (Index of Multiple Deprivation)")
+        st.write("• Good Neighbours Survey")
+        st.write("• Population Demographics")
+        st.write("• Community Life Survey")
+        
+        if st.button("🔄 Refresh Analysis"):
+            st.rerun()
+
+def sentiment_mapping_page():
+    st.header("🗺️ Sentiment & Trust Mapping")
+    st.info("Sentiment Mapping page - to be implemented")
+
+def good_neighbours_page():
+    st.header("🤝 Good Neighbours Trust Data")
+    st.info("Good Neighbours page - to be implemented")
+
+def community_survey_page():
+    st.header("📋 Community Life Survey")
+    st.info("Community Survey page - to be implemented")
+
+def intervention_page():
+    st.header("💡 Intervention Recommendations")
+    st.info("Intervention page - to be implemented")
+
+def engagement_simulator_page():
+    st.header("🎯 Engagement Simulator")
+    st.info("Engagement Simulator page - to be implemented")
+
+def alert_management_page():
+    st.header("📧 Alert Management")
+    st.info("Alert Management page - to be implemented")
+
+def genai_text_analysis_page():
+    st.header("🤖 GenAI Text Analysis")
+    st.info("GenAI Text Analysis page - to be implemented")
+
+def settings_page():
+    st.header("⚙️ System Settings")
+    st.info("Settings page - to be implemented")
+
+    # with col2:
+    #     if analysis_type == "Area Profile":
+    #         msoa_code = st.text_input("MSOA Code:", value="E02000001")
+    #     else:
+    #         n_areas = st.slider("Number of Areas:", 10, 200, 100)
     
     # Run analysis
     if st.button("Run Analysis"):
@@ -498,7 +1161,8 @@ def sentiment_mapping_page():
     with col1:
         map_type = st.selectbox(
             "Map Type:",
-            ["Trust Map", "Cohesion Map", "Sentiment Map", "Correlation Analysis", "Cohesion Dashboard"]
+            ["Trust Map", "Cohesion Map", "Sentiment Map", "Correlation Analysis", "Cohesion Dashboard"],
+            key="sentiment_map_type_selectbox"
         )
     
     with col2:
@@ -765,7 +1429,8 @@ def good_neighbours_page():
     with col1:
         analysis_type = st.selectbox(
             "Analysis Type:",
-            ["Overview", "MSOA Lookup", "Top Trust Areas", "Lowest Trust Areas", "Trust Distribution"]
+            ["Overview", "MSOA Lookup", "Top Trust Areas", "Lowest Trust Areas", "Trust Distribution"],
+            key="good_neighbours_analysis_selectbox"
         )
     
     with col2:
@@ -1041,7 +1706,8 @@ def engagement_simulator_page():
     # Scenario selection
     scenario_type = st.selectbox(
         "Scenario Type:",
-        ["Custom Scenario", "Predefined Scenarios", "Optimization"]
+        ["Custom Scenario", "Predefined Scenarios", "Optimization"],
+        key="engagement_scenario_type_selectbox"
     )
     
     if scenario_type == "Custom Scenario":
@@ -1140,7 +1806,8 @@ def engagement_simulator_page():
         budget = st.slider("Available Budget:", 500, 5000, 1000)
         target_outcome = st.selectbox(
             "Target Outcome:",
-            ["overall", "trust", "cohesion", "sentiment"]
+            ["overall", "trust", "cohesion", "sentiment"],
+            key="engagement_target_outcome_selectbox"
         )
         
         if st.button("Optimize Interventions"):
@@ -1398,12 +2065,14 @@ def genai_text_analysis_page():
         with col1:
             source = st.selectbox(
                 "Text source:",
-                ["survey", "social_media", "report", "interview", "feedback", "other"]
+                ["survey", "social_media", "report", "interview", "feedback", "other"],
+                key="genai_text_source_selectbox"
             )
         with col2:
             analysis_type = st.selectbox(
                 "Analysis focus:",
-                ["comprehensive", "social_cohesion_only", "location_focused", "sentiment_only"]
+                ["comprehensive", "social_cohesion_only", "location_focused", "sentiment_only"],
+                key="genai_analysis_focus_selectbox"
             )
         
         # Analyze button
@@ -1943,16 +2612,32 @@ def community_survey_page():
     # Sidebar filters
     st.sidebar.subheader("🔍 Filter Options")
     
-    # Question filter
-    top_questions = connector.get_top_survey_questions(20)
-    question_options = ["All Questions"] + [q['question'] for q in top_questions]
-    selected_question = st.sidebar.selectbox("Select Question", question_options)
+    # Question filter - show all questions for better user experience
+    all_questions = connector.get_all_survey_questions()
+    
+    # Add search functionality for questions
+    st.sidebar.write("**🔍 Search Questions:**")
+    question_search = st.sidebar.text_input("Type to search questions:", placeholder="e.g., satisfaction, trust, community")
+    
+    # Filter questions based on search
+    if question_search:
+        filtered_questions = [q for q in all_questions if question_search.lower() in q.lower()]
+        if filtered_questions:
+            question_options = ["All Questions"] + filtered_questions
+            st.sidebar.write(f"Found {len(filtered_questions)} matching questions")
+        else:
+            question_options = ["All Questions"] + all_questions
+            st.sidebar.warning("No questions found matching your search. Showing all questions.")
+    else:
+        question_options = ["All Questions"] + all_questions
+    
+    selected_question = st.sidebar.selectbox("Select Survey Question", question_options, help="Choose a specific survey question to analyze, or select 'All Questions' to see data from all questions", key="community_survey_question_selectbox")
     
     # LAD filter
     lad_column = survey_data.columns[1]  # Column B should be LAD names
     unique_lads = sorted(survey_data[lad_column].dropna().unique())
     lad_options = ["All Local Authorities"] + unique_lads
-    selected_lad = st.sidebar.selectbox("Select Local Authority", lad_options)
+    selected_lad = st.sidebar.selectbox("Select Local Authority District", lad_options, help="Choose a specific Local Authority District to analyze, or select 'All Local Authorities' to see data from all areas", key="community_survey_lad_selectbox")
     
     # Filter data based on selections
     filtered_data = survey_data.copy()
