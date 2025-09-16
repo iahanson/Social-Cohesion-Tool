@@ -127,6 +127,7 @@ def get_lad_comprehensive_data(lad_name: str, connector) -> Dict[str, Any]:
         'good_neighbours_data': None,
         'population_data': None,
         'community_survey_data': None,
+        'unemployment_data': None,
         'msoa_count': 0,
         'lsoa_count': 0
     }
@@ -162,6 +163,11 @@ def get_lad_comprehensive_data(lad_name: str, connector) -> Dict[str, Any]:
                     if not lad_gn_data.empty:
                         data['good_neighbours_data'] = lad_gn_data
         
+        # Get unemployment data for this LAD
+        unemployment_data = connector.get_unemployment_by_lad(lad_name)
+        if unemployment_data:
+            data['unemployment_data'] = unemployment_data
+        
         # Estimate LSOA count (roughly 4-8 LSOAs per MSOA)
         data['lsoa_count'] = data['msoa_count'] * 6  # Average estimate
         
@@ -177,48 +183,94 @@ def create_interactive_uk_map():
         return None, None
     
     try:
-        # Use CSV file directly since GeoJSON has invalid geometries
+        # Try to use GeoJSON file first for real boundaries
+        geojson_path = 'data/Local_Authority_Districts.geojson'
         csv_path = 'data/Local_Authority_Districts_May_2023.csv'
         
+        lads = None
+        
+        # Method 1: Try to load from GeoJSON file
         try:
-            df = pd.read_csv(csv_path)
+            lads = gpd.read_file(geojson_path)
+            print(f"✅ Loaded {len(lads)} LADs from GeoJSON with real boundaries")
             
-            # Create circular boundaries around each LAD center point
-            # This will create realistic-looking LAD boundaries
-            from shapely.geometry import Point
-            import numpy as np
-            
-            # Create circular boundaries with varying sizes based on area
-            geometries = []
-            for idx, row in df.iterrows():
-                center = Point(row['LONG'], row['LAT'])
+            # Check if geometries are valid
+            valid_count = lads.geometry.is_valid.sum()
+            if valid_count == 0:
+                print("⚠️ GeoJSON has no valid geometries, falling back to CSV")
+                lads = None
+            else:
+                print(f"✅ Found {valid_count} valid geometries in GeoJSON")
                 
-                # Calculate radius based on area (if available) or use default
-                if 'Shape__Area' in df.columns:
-                    # Convert area to approximate radius (assuming roughly circular)
-                    area = row['Shape__Area']
-                    radius = np.sqrt(area / np.pi) * 0.00001  # Scale factor for map coordinates
-                    radius = max(0.01, min(0.05, radius))  # Clamp between reasonable bounds
-                else:
-                    radius = 0.02  # Default radius
-                
-                # Create a circle around the center point
-                circle = center.buffer(radius)
-                geometries.append(circle)
-            
-            # Create GeoDataFrame with circular boundaries
-            lads = gpd.GeoDataFrame(df, geometry=geometries, crs='EPSG:4326')
-            
         except Exception as e:
-            st.error(f"Failed to load CSV data: {e}")
-            import traceback
-            st.error(f"Traceback: {traceback.format_exc()}")
-            return None
+            print(f"⚠️ Could not load GeoJSON: {e}")
+            lads = None
+        
+        # Method 2: Fallback to CSV with improved boundaries
+        if lads is None:
+            try:
+                print("🔄 Loading LAD data from CSV and creating improved boundaries...")
+                df = pd.read_csv(csv_path)
+            
+                # Create more realistic boundaries using multiple circles/ellipses
+                from shapely.geometry import Point, Polygon
+                import numpy as np
+                
+                geometries = []
+                for idx, row in df.iterrows():
+                    center = Point(row['LONG'], row['LAT'])
+                    
+                    # Calculate radius based on area (if available) or use default
+                    if 'Shape__Area' in df.columns:
+                        # Convert area to approximate radius (assuming roughly circular)
+                        area = row['Shape__Area']
+                        radius = np.sqrt(area / np.pi) * 0.00001  # Scale factor for map coordinates
+                        radius = max(0.01, min(0.05, radius))  # Clamp between reasonable bounds
+                    else:
+                        radius = 0.02  # Default radius
+                    
+                    # Create simple oval shape
+                    # Use different radii for x and y to create an oval
+                    radius_x = radius * 1.2  # Slightly wider
+                    radius_y = radius * 0.8  # Slightly narrower
+                    
+                    # Create oval using ellipse approximation
+                    # Generate points around an ellipse
+                    num_points = 16  # More points for smoother oval
+                    angles = np.linspace(0, 2*np.pi, num_points, endpoint=False)
+                    
+                    oval_points = []
+                    for angle in angles:
+                        x = center.x + radius_x * np.cos(angle)
+                        y = center.y + radius_y * np.sin(angle)
+                        oval_points.append((x, y))
+                    
+                    # Create oval polygon
+                    try:
+                        oval = Polygon(oval_points)
+                        if oval.is_valid:
+                            geometries.append(oval)
+                        else:
+                            # Fallback to simple circle if oval is invalid
+                            geometries.append(center.buffer(radius))
+                    except:
+                        # Fallback to simple circle if oval creation fails
+                        geometries.append(center.buffer(radius))
+                
+                # Create GeoDataFrame with improved boundaries
+                lads = gpd.GeoDataFrame(df, geometry=geometries, crs='EPSG:4326')
+                print(f"✅ Created {len(lads)} LADs with improved boundaries from CSV")
+                
+            except Exception as e:
+                st.error(f"Failed to load CSV data: {e}")
+                import traceback
+                st.error(f"Traceback: {traceback.format_exc()}")
+                return None, None
         
         # Initialize a folium map centered on the UK
         m = folium.Map(
-            location=[54.5, -3], 
-            zoom_start=5, 
+            location=[52.5, -1.5], 
+            zoom_start=6, 
             tiles='cartodbpositron'
         )
         
@@ -235,13 +287,61 @@ def create_interactive_uk_map():
                     break
             
             if lad_name_col:
-                # Generate sample risk data for demonstration
-                # In a real implementation, this would come from your early warning system
-                np.random.seed(42)  # For consistent results
-                lads['risk_score'] = np.random.uniform(0, 1, len(lads))
-                lads['risk_level'] = lads['risk_score'].apply(
-                    lambda x: 'Critical' if x >= 0.8 else 'High' if x >= 0.6 else 'Medium' if x >= 0.4 else 'Low'
-                )
+                # Get real risk data from Early Warning System
+                try:
+                    # Use the shared Early Warning System instance from session state
+                    if 'early_warning_system' not in st.session_state:
+                        from src.early_warning_system import EarlyWarningSystem
+                        st.session_state.early_warning_system = EarlyWarningSystem(st.session_state.unified_data_connector)
+                    
+                    ew_data = st.session_state.early_warning_system.run_full_analysis()
+                    
+                    if ew_data and 'data' in ew_data:
+                        risk_df = ew_data['data']
+                        
+                        # Initialize with default values
+                        lads['risk_score'] = 0.5  # Default risk score
+                        lads['risk_level'] = 'Medium'  # Default risk level
+                        
+                        # Map risk data to LADs
+                        matched_count = 0
+                        for idx, row in lads.iterrows():
+                            lad_name = row.get('LAD24NM', '')
+                            
+                            # Look for exact match first
+                            exact_match = risk_df[risk_df['area_name'].str.lower() == lad_name.lower()]
+                            if not exact_match.empty:
+                                risk_row = exact_match.iloc[0]
+                                lads.at[idx, 'risk_score'] = risk_row.get('risk_score', 0.5)
+                                lads.at[idx, 'risk_level'] = risk_row.get('risk_level', 'Medium')
+                                matched_count += 1
+                            else:
+                                # Try partial matching for common LAD name variations
+                                lad_parts = lad_name.split()
+                                for part in lad_parts:
+                                    if len(part) > 3:  # Only try meaningful parts
+                                        partial_match = risk_df[risk_df['area_name'].str.contains(part, case=False, na=False)]
+                                        if not partial_match.empty:
+                                            risk_row = partial_match.iloc[0]
+                                            lads.at[idx, 'risk_score'] = risk_row.get('risk_score', 0.5)
+                                            lads.at[idx, 'risk_level'] = risk_row.get('risk_level', 'Medium')
+                                            matched_count += 1
+                                            break
+                        
+                        print(f"✅ Mapped Early Warning System risk data to {matched_count}/{len(lads)} LADs")
+                    else:
+                        print("⚠️ No Early Warning System data available, using default values")
+                        lads['risk_score'] = 0.5
+                        lads['risk_level'] = 'Medium'
+                        
+                except Exception as e:
+                    print(f"⚠️ Error loading Early Warning System data: {e}")
+                    # Fallback to sample data for demonstration
+                    np.random.seed(42)  # For consistent results
+                    lads['risk_score'] = np.random.uniform(0, 1, len(lads))
+                    lads['risk_level'] = lads['risk_score'].apply(
+                        lambda x: 'Critical' if x >= 0.8 else 'High' if x >= 0.6 else 'Medium' if x >= 0.4 else 'Low'
+                    )
                 
                 
                 # Define color mapping for risk levels
@@ -627,7 +727,7 @@ def dashboard_overview():
                     # Display LAD data in tabs
                     st.subheader(f"📊 Data for {selected_lad_manual}")
                     
-                    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Overview", "🏘️ Population", "📊 IMD Data", "🤝 Social Trust", "📋 Community Survey"])
+                    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 Overview", "🏘️ Population", "📊 IMD Data", "🤝 Social Trust", "📋 Community Survey", "💼 Unemployment"])
                     
                     with tab1:
                         st.markdown(f"""
@@ -727,6 +827,48 @@ def dashboard_overview():
                             st.dataframe(survey_data, use_container_width=True)
                         else:
                             st.warning("⚠️ No Community Life Survey data available for this LAD")
+                    
+                    with tab6:
+                        if lad_data['unemployment_data'] is not None:
+                            st.subheader("Unemployment Data")
+                            unemployment = lad_data['unemployment_data']
+                            
+                            # Display unemployment metrics
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Geography Code", unemployment.get('geography_code', 'N/A'))
+                            with col2:
+                                people_looking = unemployment.get('people_looking_for_work', 0)
+                                st.metric("People Looking for Work", f"{people_looking:,}")
+                            with col3:
+                                unemployment_rate = unemployment.get('unemployment_proportion', 0)
+                                st.metric("Unemployment Rate", f"{unemployment_rate:.1f}%")
+                            
+                            # Display detailed unemployment information
+                            st.markdown(f"""
+                            **Unemployment Details:**
+                            - **Geography Name:** {unemployment.get('geography_name', 'N/A')}
+                            - **Match Type:** {unemployment.get('match_type', 'N/A')}
+                            - **People Looking for Work:** {unemployment.get('people_looking_for_work', 0):,}
+                            - **Unemployment Proportion:** {unemployment.get('unemployment_proportion', 0):.2f}%
+                            """)
+                            
+                            # Create a simple visualization
+                            if unemployment.get('unemployment_proportion', 0) > 0:
+                                import plotly.express as px
+                                
+                                # Create a simple bar chart
+                                fig = px.bar(
+                                    x=['Unemployment Rate'],
+                                    y=[unemployment.get('unemployment_proportion', 0)],
+                                    title=f"Unemployment Rate for {lad_data['lad_name']}",
+                                    labels={'x': 'Metric', 'y': 'Percentage (%)'},
+                                    color_discrete_sequence=['#ff6b6b']
+                                )
+                                fig.update_layout(height=400)
+                                st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.warning("⚠️ No unemployment data available for this LAD")
             else:
                 st.warning("⚠️ No LAD data available for manual selection")
             
@@ -782,9 +924,9 @@ def early_warning_page():
     
     with col4:
         st.metric(
-            label="Risk Clusters",
-            value=ew_data['summary']['risk_clusters'],
-            delta=f"{ew_data['summary']['cluster_sizes']['large']} large"
+            label="High Risk Areas",
+            value=ew_data['summary']['high_risk_areas'],
+            delta=f"{ew_data['summary']['critical_risk_areas']} critical"
         )
     
     # Risk level distribution
@@ -901,26 +1043,41 @@ def early_warning_page():
     # Risk factors analysis
     st.subheader("📊 Risk Factors Analysis")
     
-    # Get top risk factors
-    risk_factors = ew_data.get('risk_factors', {})
+    # Get risk distribution from summary
+    risk_distribution = ew_data['summary'].get('risk_distribution', {})
     
-    if risk_factors:
+    if risk_distribution:
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("**Top Risk Factors:**")
-            for factor, score in risk_factors.get('top_risk_factors', [])[:5]:
-                st.write(f"• {factor}: {score:.3f}")
+            st.markdown("**Risk Level Distribution:**")
+            for level, count in risk_distribution.items():
+                st.write(f"• {level}: {count} areas")
         
         with col2:
-            st.markdown("**Protective Factors:**")
-            for factor, score in risk_factors.get('protective_factors', [])[:5]:
-                st.write(f"• {factor}: {score:.3f}")
+            avg_risk = ew_data['summary'].get('average_risk_score', 0)
+            st.markdown("**Risk Statistics:**")
+            st.write(f"• Average Risk Score: {avg_risk:.3f}")
+            st.write(f"• Total Areas Monitored: {ew_data['summary']['total_areas']}")
+            st.write(f"• Total Alerts Generated: {ew_data['summary']['total_alerts']}")
     
     # Recommendations
     st.subheader("💡 Recommendations")
     
-    recommendations = ew_data.get('recommendations', [])
+    # Generate recommendations based on the data
+    recommendations = []
+    
+    if ew_data['summary']['critical_risk_areas'] > 0:
+        recommendations.append("Immediate intervention required for critical risk areas")
+    
+    if ew_data['summary']['anomalous_areas'] > 0:
+        recommendations.append("Investigate anomalous areas for emerging social tensions")
+    
+    if ew_data['summary']['high_risk_areas'] > 5:
+        recommendations.append("Consider broad-based community engagement programs")
+    
+    if ew_data['summary']['average_risk_score'] > 0.6:
+        recommendations.append("Implement early warning monitoring across all areas")
     
     if recommendations:
         for i, rec in enumerate(recommendations, 1):

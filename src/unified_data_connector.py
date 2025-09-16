@@ -12,6 +12,7 @@ from datetime import datetime
 import json
 from .lsoa_msoa_mapper import lsoa_msoa_mapper
 from .community_life_survey_connector import CommunityLifeSurveyConnector
+from .unemployment_connector import UnemploymentConnector
 
 @dataclass
 class MSOADataResult:
@@ -37,6 +38,12 @@ class UnifiedDataConnector:
         self.population_cache_file = os.path.join("data", "msoa_population_cache.json")
         self.community_survey_data = None
         self.community_survey_connector = CommunityLifeSurveyConnector()
+        self.unemployment_data = None
+        try:
+            self.unemployment_connector = UnemploymentConnector()
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to initialize unemployment connector: {e}")
+            self.unemployment_connector = None
         
         if auto_load:
             self._load_data_sources()
@@ -104,6 +111,13 @@ class UnifiedDataConnector:
                     print("❌ Community Life Survey data loading failed")
             else:
                 print("⚠️ Community Life Survey data disabled")
+            
+            # Load unemployment data
+            self.unemployment_data = self._load_unemployment_data()
+            if self.unemployment_data is not None:
+                print("✅ Unemployment data loaded successfully")
+            else:
+                print("❌ Unemployment data loading failed")
                 
         except Exception as e:
             print(f"❌ Error loading data sources: {e}")
@@ -1030,6 +1044,60 @@ class UnifiedDataConnector:
     def get_community_survey_data(self) -> Optional[pd.DataFrame]:
         """Get Community Life Survey data"""
         return self.community_survey_data
+    
+    def _load_unemployment_data(self) -> Optional[pd.DataFrame]:
+        """Load unemployment data"""
+        try:
+            if self.unemployment_connector is None:
+                print("⚠️ Unemployment connector not available, skipping unemployment data loading")
+                return None
+                
+            print("🔄 Loading unemployment data...")
+            
+            # Load data using the unemployment connector
+            unemployment_data = self.unemployment_connector.get_unemployment_data()
+            
+            if unemployment_data is None or unemployment_data.empty:
+                print("❌ No unemployment data could be loaded")
+                return None
+            
+            print(f"✅ Unemployment data loaded: {len(unemployment_data)} areas")
+            return unemployment_data
+            
+        except Exception as e:
+            print(f"❌ Error loading unemployment data: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def get_unemployment_data(self) -> Optional[pd.DataFrame]:
+        """Get unemployment data"""
+        return self.unemployment_data
+    
+    def get_unemployment_by_lad(self, lad_name: str) -> Optional[Dict[str, Any]]:
+        """Get unemployment data for a specific LAD"""
+        if self.unemployment_connector is None:
+            print(f"⚠️ Warning: Unemployment connector not available")
+            return None
+        try:
+            return self.unemployment_connector.get_unemployment_by_lad(lad_name)
+        except Exception as e:
+            print(f"❌ Error getting unemployment data for {lad_name}: {e}")
+            return None
+    
+    def get_unemployment_summary(self) -> Dict[str, Any]:
+        """Get summary of unemployment data"""
+        if self.unemployment_data is None:
+            return {}
+        
+        if self.unemployment_connector is None:
+            return {}
+            
+        try:
+            return self.unemployment_connector.get_unemployment_summary()
+        except Exception as e:
+            print(f"❌ Error getting unemployment summary: {e}")
+            return {}
     
     def get_community_survey_summary(self) -> Dict[str, Any]:
         """Get summary of Community Life Survey data"""

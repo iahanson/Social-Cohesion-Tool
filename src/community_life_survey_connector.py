@@ -13,6 +13,11 @@ warnings.filterwarnings('ignore')
 class CommunityLifeSurveyConnector:
     """Connector for Community Life Survey data"""
     
+    # Class-level cache to share data across instances
+    _class_survey_data = {}
+    _class_processed_data = None
+    _class_data_loaded = False
+    
     def __init__(self, file_path: str = "data/Community_Life_Survey_2023_24.xlsx", use_cleaned: bool = True):
         # Use cleaned file by default if available
         cleaned_file = file_path.replace('.xlsx', '_cleaned.xlsx')
@@ -33,9 +38,16 @@ class CommunityLifeSurveyConnector:
         
     def load_all_sheets(self) -> Dict[str, pd.DataFrame]:
         """Load all sheets from the Community Life Survey file"""
-        # Return cached data if already loaded
+        # Return cached data if already loaded (check both instance and class cache)
         if self._data_loaded and self.survey_data:
             print("📊 Using cached Community Life Survey data")
+            return self.survey_data
+        
+        # Check class-level cache
+        if CommunityLifeSurveyConnector._class_data_loaded and CommunityLifeSurveyConnector._class_survey_data:
+            print("📊 Using class-level cached Community Life Survey data")
+            self.survey_data = CommunityLifeSurveyConnector._class_survey_data.copy()
+            self._data_loaded = True
             return self.survey_data
             
         try:
@@ -59,6 +71,11 @@ class CommunityLifeSurveyConnector:
             
             self.survey_data = loaded_sheets
             self._data_loaded = True  # Mark as loaded
+            
+            # Store in class-level cache
+            CommunityLifeSurveyConnector._class_survey_data = loaded_sheets
+            CommunityLifeSurveyConnector._class_data_loaded = True
+            
             print(f"✅ Successfully loaded {len(loaded_sheets)} sheets")
             return loaded_sheets
             
@@ -204,12 +221,29 @@ class CommunityLifeSurveyConnector:
     
     def process_all_sheets(self) -> pd.DataFrame:
         """Process all sheets and combine into a single dataset"""
+        # Return cached processed data if available (check both instance and class cache)
+        if self.processed_data is not None:
+            print("📊 Using cached processed Community Life Survey data")
+            return self.processed_data
+        
+        # Check class-level cache
+        if CommunityLifeSurveyConnector._class_processed_data is not None:
+            print("📊 Using class-level cached processed Community Life Survey data")
+            self.processed_data = CommunityLifeSurveyConnector._class_processed_data.copy()
+            return self.processed_data
+            
         if not self.survey_data:
             self.load_all_sheets()
         
         if not self.survey_data:
             return pd.DataFrame()
         
+        # Double-check that we haven't already processed this data
+        if CommunityLifeSurveyConnector._class_processed_data is not None:
+            print("📊 Found class-level processed data, using cached result")
+            self.processed_data = CommunityLifeSurveyConnector._class_processed_data.copy()
+            return self.processed_data
+            
         print("🔄 Processing all sheets...")
         
         all_data = []
@@ -238,6 +272,10 @@ class CommunityLifeSurveyConnector:
             print(f"✅ Combined data from {processed_count} sheets: {len(combined_data)} total rows")
             
             self.processed_data = combined_data
+            
+            # Store in class-level cache
+            CommunityLifeSurveyConnector._class_processed_data = combined_data
+            
             return combined_data
         else:
             print("❌ No data could be extracted from any sheets")

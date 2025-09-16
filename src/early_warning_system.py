@@ -77,13 +77,16 @@ class EarlyWarningSystem:
             print("❌ No IMD data available")
             return self.generate_sample_data(100)
         
+        # Get unemployment data
+        unemployment_data = self.data_connector.unemployment_data
+        
         # Combine data sources
-        combined_data = self._combine_real_data_sources(population_data, good_neighbours_data, imd_data)
+        combined_data = self._combine_real_data_sources(population_data, good_neighbours_data, imd_data, unemployment_data)
         
         print(f"✅ Loaded real data for {len(combined_data)} MSOAs")
         return combined_data
     
-    def _combine_real_data_sources(self, population_data: pd.DataFrame, good_neighbours_data: pd.DataFrame, imd_data: pd.DataFrame) -> pd.DataFrame:
+    def _combine_real_data_sources(self, population_data: pd.DataFrame, good_neighbours_data: pd.DataFrame, imd_data: pd.DataFrame, unemployment_data: pd.DataFrame = None) -> pd.DataFrame:
         """
         Combine real data sources into a unified dataset for early warning analysis
         
@@ -91,6 +94,7 @@ class EarlyWarningSystem:
             population_data: MSOA-level population data
             good_neighbours_data: MSOA-level social trust data
             imd_data: MSOA-level deprivation data
+            unemployment_data: LAD-level unemployment data
             
         Returns:
             Combined DataFrame with all indicators
@@ -128,6 +132,38 @@ class EarlyWarningSystem:
             combined['economic_uncertainty'] = (11 - combined['msoa_imd_decile']) * 0.5  # Higher decile = lower uncertainty
             combined['housing_stress'] = (11 - combined['msoa_imd_decile']) * 8  # Higher decile = lower stress
         
+        # Add unemployment data (LAD-level, needs to be mapped to MSOAs)
+        if unemployment_data is not None:
+            # Extract LAD information from MSOA names or use IMD LA data
+            if 'la_name' in combined.columns:
+                # Use LA name from IMD data
+                combined = combined.merge(
+                    unemployment_data[['geography_name', 'unemployment_proportion', 'people_looking_for_work']], 
+                    left_on='la_name', 
+                    right_on='geography_name', 
+                    how='left',
+                    suffixes=('', '_unemp')
+                )
+            else:
+                # Try to extract LAD from MSOA name
+                combined['extracted_lad'] = combined['msoa_name'].str.extract(r'(\w+)')[0]
+                combined = combined.merge(
+                    unemployment_data[['geography_name', 'unemployment_proportion', 'people_looking_for_work']], 
+                    left_on='extracted_lad', 
+                    right_on='geography_name', 
+                    how='left',
+                    suffixes=('', '_unemp')
+                )
+                combined = combined.drop('extracted_lad', axis=1)
+            
+            # Use real unemployment data if available
+            combined['unemployment_rate'] = combined['unemployment_proportion'].fillna(
+                (11 - combined['msoa_imd_decile']) * 2 + np.random.beta(2, 8, len(combined)) * 5
+            )
+        else:
+            # Fallback to synthetic unemployment data
+            combined['unemployment_rate'] = (11 - combined['msoa_imd_decile']) * 2 + np.random.beta(2, 8, len(combined)) * 5
+        
         # Create additional indicators from population data
         if 'total_population' in combined.columns:
             # Population density proxy (using total population as proxy)
@@ -162,8 +198,7 @@ class EarlyWarningSystem:
         # Create crime rate proxy based on deprivation
         combined['crime_rate'] = (11 - combined['msoa_imd_decile']) * 10 + np.random.gamma(2, 5, len(combined))
         
-        # Create unemployment rate proxy based on deprivation
-        combined['unemployment_rate'] = (11 - combined['msoa_imd_decile']) * 2 + np.random.beta(2, 8, len(combined)) * 5
+        # Unemployment rate is now handled above with real data integration
         
         # Create sentiment score based on trust and deprivation
         combined['sentiment_score'] = combined['social_trust_score'] - (11 - combined['msoa_imd_decile']) * 0.3 + np.random.normal(0, 0.5, len(combined))
