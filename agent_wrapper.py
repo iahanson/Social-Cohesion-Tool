@@ -6,7 +6,7 @@ project = AIProjectClient(
     credential=DefaultAzureCredential(),
     endpoint="https://shared-ai-hub-foundry.services.ai.azure.com/api/projects/Team-15-Communities")
 
-agent = project.agents.get_agent("asst_hpw4j8I1zrSDVIFidlfegvSi")
+agent = project.agents.get_agent("asst_MKXJWz6odu2T5o8yVuRPonxB")
 
 thread = project.agents.threads.create()
 print(f"Created thread, ID: {thread.id}")
@@ -15,7 +15,8 @@ message=project.agents.messages.create(
     thread_id=thread.id,
     role="user",
     content=(
-        """Research UK news sources and give me a summary of the most recent trending topics"""
+        """Dont ask questions and only output the finished csv. Scan local news articles in the  UK across all local authorities and provide links based on the defined categories.Output a csv
+        Include the source area of the article and also the area referenced in the article."""
     )
 )
 
