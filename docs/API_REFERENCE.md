@@ -246,6 +246,104 @@ python main.py trust lowest --bottom 10
 - Trust scores and percentages
 - MSOA codes and names
 
+### Data Management Commands
+
+#### `python main.py refresh-population-cache`
+Refresh the population data cache for faster loading.
+
+**Examples:**
+```bash
+python main.py refresh-population-cache
+```
+
+**Output:**
+- Cache refresh status
+- Data processing results
+- Performance metrics
+
+#### `python main.py refresh-community-survey-data`
+Refresh the Community Life Survey data cache.
+
+**Examples:**
+```bash
+python main.py refresh-community-survey-data
+```
+
+**Output:**
+- Survey data processing status
+- Question extraction results
+- Data validation results
+
+### Local News Commands
+
+#### `python main.py news analyze --lad "Kensington and Chelsea"`
+Analyze local news for a specific LAD.
+
+**Options:**
+- `--lad, -l`: Local Authority District name
+- `--output, -o`: Output format (console, json, csv)
+
+**Examples:**
+```bash
+python main.py news analyze --lad "Kensington and Chelsea"
+python main.py news analyze --lad "Barnsley Borough Council" --output json
+```
+
+**Output:**
+- News articles for the LAD
+- Sentiment analysis results
+- Social cohesion relevance scores
+- Geographic coverage analysis
+
+#### `python main.py news summary`
+Get summary of local news data.
+
+**Examples:**
+```bash
+python main.py news summary
+```
+
+**Output:**
+- Total articles processed
+- Geographic coverage statistics
+- Sentiment distribution
+- Key themes identified
+
+### Unemployment Commands
+
+#### `python main.py unemployment lookup --lad "Kensington and Chelsea"`
+Look up unemployment data for a specific LAD.
+
+**Options:**
+- `--lad, -l`: Local Authority District name
+- `--output, -o`: Output format (console, json, csv)
+
+**Examples:**
+```bash
+python main.py unemployment lookup --lad "Kensington and Chelsea"
+python main.py unemployment lookup --lad "Barnsley Borough Council" --output json
+```
+
+**Output:**
+- Unemployment statistics
+- People looking for work
+- Unemployment proportion
+- Geographic information
+
+#### `python main.py unemployment summary`
+Get summary of unemployment data.
+
+**Examples:**
+```bash
+python main.py unemployment summary
+```
+
+**Output:**
+- Total areas monitored
+- Average unemployment rate
+- Total people looking for work
+- Statistical summaries
+
 ### Early Warning System Commands
 
 #### `python main.py warning analyze`

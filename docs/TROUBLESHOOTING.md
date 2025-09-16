@@ -298,7 +298,150 @@ print(f'Memory usage: {psutil.virtual_memory().percent}%')
 # Close other tabs and applications
 ```
 
-### 8. CLI Commands Not Working
+### 8. New Features Issues
+
+#### Problem: Interactive maps not displaying or showing errors
+**Symptoms:**
+- Maps appear blank or show error messages
+- Choropleth colors not displaying correctly
+- Click functionality not working
+
+**Solutions:**
+```bash
+# 1. Check required packages
+pip install folium streamlit-folium geopandas shapely
+
+# 2. Verify geographic data files
+ls -la data/Local_Authority_Districts_May_2023.csv
+# Should contain: LAD24CD, LAD24NM, LAT, LONG columns
+
+# 3. Check map configuration
+MAP_DEFAULT_CENTER_LAT=52.5
+MAP_DEFAULT_CENTER_LON=-1.5
+MAP_DEFAULT_ZOOM=6
+
+# 4. Clear Streamlit cache
+streamlit cache clear
+
+# 5. Test with different browser
+# Try Chrome, Firefox, or Edge
+```
+
+#### Problem: Local news analysis not working
+**Symptoms:**
+- News data not loading
+- Location mapping failing
+- Sentiment analysis returning empty results
+
+**Solutions:**
+```bash
+# 1. Check news data file
+ls -la data/england_local_news_batch100_full_completed.csv
+# Should contain: local_authority_district, brief_description, referenced_place
+
+# 2. Verify GenAI configuration
+GENAI_PROVIDER=aws  # or azure
+# Ensure AWS Bedrock or Azure OpenAI is properly configured
+
+# 3. Check location mapping
+LOCATION_MAPPING_ENABLED=true
+LOCATION_FUZZY_MATCH=true
+
+# 4. Test news analysis manually
+python -c "
+from src.local_news_connector import LocalNewsConnector
+connector = LocalNewsConnector()
+data = connector.get_news_data()
+print(f'Loaded {len(data)} news articles')
+"
+```
+
+#### Problem: Unemployment data not loading
+**Symptoms:**
+- Unemployment tab shows "No data available"
+- Error messages about missing columns
+- Data loading fails
+
+**Solutions:**
+```bash
+# 1. Check unemployment data file
+ls -la data/unmenploymentSept25.xls
+# Note: .xls file (not .xlsx)
+
+# 2. Install xlrd package
+pip install xlrd>=2.0.1
+
+# 3. Verify file structure
+python -c "
+import pandas as pd
+df = pd.read_excel('data/unmenploymentSept25.xls')
+print('Columns:', df.columns.tolist())
+print('Shape:', df.shape)
+print('Sample data:')
+print(df.head(3))
+"
+
+# 4. Check column mapping
+# Geography Code should be in Column B
+# Geography Name should be in Column A
+# People Looking for Work should be in Column E
+# Unemployment Proportion should be in Column H
+```
+
+#### Problem: Similar LADs analysis showing no results
+**Symptoms:**
+- "No similar LADs data available" message
+- Similar LADs tab empty
+- Risk scores showing as 0
+
+**Solutions:**
+```bash
+# 1. Check Early Warning System data
+python -c "
+from src.early_warning_system import EarlyWarningSystem
+ews = EarlyWarningSystem()
+data = ews.get_analysis_data()
+print(f'EWS data shape: {data.shape if hasattr(data, \"shape\") else \"No data\"}')
+"
+
+# 2. Verify LAD name matching
+# Check that LAD names in EWS match those in dropdown
+
+# 3. Test similarity calculation
+python -c "
+from src.unified_data_connector import UnifiedDataConnector
+connector = UnifiedDataConnector()
+similar = connector.get_similar_lads_by_risk('Kensington and Chelsea', top_n=5)
+print(f'Found {len(similar)} similar LADs')
+"
+```
+
+#### Problem: Community Life Survey data issues
+**Symptoms:**
+- Survey questions showing as sheet names instead of actual questions
+- Data not loading or showing empty results
+- Column name conflicts
+
+**Solutions:**
+```bash
+# 1. Check survey data file
+ls -la data/Community_Life_Survey_2023_24.xlsx
+
+# 2. Refresh survey data cache
+python main.py refresh-community-survey-data
+
+# 3. Check file structure
+python -c "
+import pandas as pd
+df = pd.read_excel('data/Community_Life_Survey_2023_24.xlsx', sheet_name=None)
+print('Available sheets:', list(df.keys()))
+"
+
+# 4. Clear and reload data
+# Delete any cached files and restart the application
+```
+
+### 9. CLI Commands Not Working
 
 #### Problem: Commands fail with "command not found" or errors
 **Solutions:**
@@ -360,6 +503,48 @@ python main.py --help
 # Verify API key in .env file
 # Check key format and validity
 # Ensure resource has required models deployed
+```
+
+#### `UnboundLocalError: cannot access local variable 'pd'`
+```bash
+# This is caused by local pandas imports inside functions
+# Solution: Remove local import statements, use global import
+# Check for: import pandas as pd inside functions
+```
+
+#### `xlrd.biffh.XLRDError: Excel xlsx file; not supported`
+```bash
+# Install xlrd package for .xls files
+pip install xlrd>=2.0.1
+# Or convert .xls to .xlsx format
+```
+
+#### `KeyError: 'Geography code'` or similar column errors
+```bash
+# Check Excel file structure
+# Verify column names match expected format
+# Check for header rows that need to be skipped
+```
+
+#### `ValueError: Duplicate column names found`
+```bash
+# Usually in Community Life Survey data
+# Check for duplicate 'Question' columns
+# Refresh survey data cache: python main.py refresh-community-survey-data
+```
+
+#### `IndentationError: unindent does not match any outer indentation level`
+```bash
+# Check Python file indentation
+# Use consistent spaces or tabs (not both)
+# Check for mixed indentation in streamlit_app.py
+```
+
+#### `SyntaxError: invalid decimal literal` in f-strings
+```bash
+# Check for unescaped quotes in f-string expressions
+# Use \" instead of " inside f-strings
+# Check HTML content in map popups
 ```
 
 ## Getting Help

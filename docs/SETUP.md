@@ -74,12 +74,51 @@ Place these files in the `data/` directory:
    - Source: Local survey data
    - Columns: MSOA_code, MSOA_name, always_trust OR usually_trust, usually_careful OR almost_always_careful, Net_trust
 
+3. **Community Life Survey Data**
+   - File: `Community_Life_Survey_2023_24.xlsx`
+   - Source: [GOV.UK Community Life Survey](https://www.gov.uk/government/statistics/community-life-survey-2023-24)
+   - Multiple sheets with social trust and community cohesion data
+
+4. **Unemployment Data**
+   - File: `unmenploymentSept25.xls`
+   - Source: ONS unemployment statistics
+   - Columns: Geography Code (Column B), Geography Name (Column A), People Looking for Work (Column E), Unemployment Proportion (Column H)
+
+5. **Local News Data**
+   - File: `england_local_news_batch100_full_completed.csv`
+   - Source: Scraped local news articles
+   - Columns: local_authority_district, brief_description, referenced_place, url, source
+
+6. **Geographic Data**
+   - File: `Local_Authority_Districts_May_2023.csv`
+   - Source: ONS geographic boundaries
+   - Columns: LAD24CD, LAD24NM, LAT, LONG for mapping
+
+7. **Population Data**
+   - File: `Census_population_2022.xlsx`
+   - Source: ONS Census data
+   - LSOA-level population statistics
+
+8. **Area Lookup Data**
+   - File: `Census21 areaLookupTable.xlsx`
+   - Source: ONS Census lookup tables
+   - LSOA to MSOA mapping data
+
 ### Data Directory Structure
 
 ```
 data/
 ├── IMD2019_Index_of_Multiple_Deprivation.xlsx
-└── good_neighbours_full_data_by_msoa.xlsx
+├── good_neighbours_full_data_by_msoa.xlsx
+├── Community_Life_Survey_2023_24.xlsx
+├── unmenploymentSept25.xls
+├── england_local_news_batch100_full_completed.csv
+├── Local_Authority_Districts_May_2023.csv
+├── Census_population_2022.xlsx
+├── Census21 areaLookupTable.xlsx
+├── lsoa_msoa_mapping.json
+├── msoa_population_cache.json
+└── alert_log.json
 ```
 
 ## Verification
@@ -107,9 +146,14 @@ The system should show:
 - ✅ All components initialized successfully
 - ✅ Sample data generated and processed
 - ✅ Real IMD and Good Neighbours data loaded
+- ✅ Community Life Survey data processed
+- ✅ Unemployment data integrated
+- ✅ Local news data mapped and analyzed
+- ✅ Population data cached and aggregated
 - ✅ Risk analysis completed
 - ✅ Intervention recommendations generated
 - ✅ Impact simulation completed
+- ✅ Interactive maps rendered successfully
 
 ## Next Steps
 

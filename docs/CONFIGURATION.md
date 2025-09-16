@@ -23,13 +23,28 @@ IMD_DATA_FILE_PATH=data/IMD2019_Index_of_Multiple_Deprivation.xlsx
 GOOD_NEIGHBOURS_USE_REAL_DATA=true
 GOOD_NEIGHBOURS_FILE_PATH=data/good_neighbours_full_data_by_msoa.xlsx
 
+# Community Life Survey Data
+COMMUNITY_LIFE_SURVEY_USE_REAL_DATA=true
+COMMUNITY_LIFE_SURVEY_FILE_PATH=data/Community_Life_Survey_2023_24.xlsx
+
+# Unemployment Data
+UNEMPLOYMENT_DATA_USE_REAL_DATA=true
+UNEMPLOYMENT_DATA_FILE_PATH=data/unmenploymentSept25.xls
+
+# Local News Data
+LOCAL_NEWS_DATA_USE_REAL_DATA=true
+LOCAL_NEWS_DATA_FILE_PATH=data/england_local_news_batch100_full_completed.csv
+
+# Population Data
+POPULATION_DATA_USE_REAL_DATA=true
+POPULATION_DATA_FILE_PATH=data/Census_population_2022.xlsx
+
+# Geographic Data
+GEOGRAPHIC_DATA_FILE_PATH=data/Local_Authority_Districts_May_2023.csv
+
 # ONS Census Data
 ONS_CENSUS_USE_REAL_DATA=false
 ONS_CENSUS_URL=https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/middlesuperoutputareamidyearpopulationestimates/mid2020/sape22dt1amid2020on2021geography.xlsx
-
-# Community Life Survey
-COMMUNITY_LIFE_SURVEY_USE_REAL_DATA=false
-COMMUNITY_LIFE_SURVEY_URL=https://www.gov.uk/government/statistics/community-life-survey-2020-21
 
 # Crime Data
 CRIME_DATA_USE_REAL_DATA=false
@@ -81,6 +96,10 @@ AWS_BEDROCK_TOP_K=250
 AWS_ACCESS_KEY_ID=your_access_key
 AWS_SECRET_ACCESS_KEY=your_secret_key
 AWS_SESSION_TOKEN=your_session_token  # Optional for temporary credentials
+
+# Note: Use inference profile ID, not model ID
+# Correct format: anthropic.claude-3-5-sonnet-20241022-v2:0
+# Incorrect format: anthropic.claude-sonnet-4-20250514-v1:0
 ```
 
 ### Getting Azure OpenAI Credentials
@@ -197,6 +216,51 @@ TWILIO_PHONE_NUMBER=+447700900123
    - Use international format (+44 for UK)
    - Verify number if required
 
+## New Features Configuration
+
+### Interactive Mapping
+
+```bash
+# Map Configuration
+MAP_DEFAULT_CENTER_LAT=52.5
+MAP_DEFAULT_CENTER_LON=-1.5
+MAP_DEFAULT_ZOOM=6
+MAP_TILE_PROVIDER=cartodbpositron
+
+# Choropleth Configuration
+CHOROPLETH_COLORS=["#2E8B57", "#FFD700", "#FF8C00", "#DC143C"]
+CHOROPLETH_CATEGORIES=["Low Risk", "Medium Risk", "High Risk", "Critical Risk"]
+```
+
+### Local News Analysis
+
+```bash
+# News Analysis Configuration
+NEWS_ANALYSIS_ENABLED=true
+NEWS_SENTIMENT_THRESHOLD=0.5
+NEWS_COHESION_KEYWORDS=["community", "trust", "safety", "cohesion", "integration", "diversity"]
+
+# Location Mapping
+LOCATION_MAPPING_ENABLED=true
+LOCATION_FUZZY_MATCH=true
+LOCATION_MATCH_THRESHOLD=0.8
+```
+
+### Similar LADs Analysis
+
+```bash
+# Similarity Configuration
+SIMILARITY_ALGORITHM=risk_based
+SIMILARITY_THRESHOLD=0.7
+MAX_SIMILAR_LADS=10
+SIMILARITY_WEIGHTS={
+    "risk_score": 0.4,
+    "trust_score": 0.3,
+    "deprivation": 0.2,
+    "population": 0.1
+}
+```
+
 ## System Configuration
 
 ### Debug and Logging
@@ -211,6 +275,10 @@ LOG_LEVEL=INFO
 # Data cache settings
 CACHE_ENABLED=true
 CACHE_TTL_HOURS=24
+
+# Population cache settings
+POPULATION_CACHE_ENABLED=true
+POPULATION_CACHE_FILE=data/msoa_population_cache.json
 ```
 
 ### Performance Settings
