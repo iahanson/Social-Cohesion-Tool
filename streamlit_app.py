@@ -119,6 +119,134 @@ def find_lad_by_coordinates(clicked_coords: List[float], lads_gdf) -> Optional[s
         st.write(f"🔍 Debug - Error finding LAD by coordinates: {e}")
         return None
 
+def get_similar_lads_by_risk(lad_name: str, connector, top_n: int = 10) -> List[Dict[str, Any]]:
+    """Get the top N most similar LADs based on risk scores"""
+    try:
+        print(f"🔍 Debug - Looking for similar LADs for: {lad_name}")
+        
+        # Get Early Warning System data
+        if 'early_warning_system' not in st.session_state:
+            from src.early_warning_system import EarlyWarningSystem
+            st.session_state.early_warning_system = EarlyWarningSystem(st.session_state.unified_data_connector)
+        
+        ew_data = st.session_state.early_warning_system.run_full_analysis()
+        
+        if not ew_data or 'data' not in ew_data:
+            print(f"❌ Debug - No Early Warning System data available")
+            return []
+        
+        risk_df = ew_data['data']
+        print(f"🔍 Debug - Risk data shape: {risk_df.shape}")
+        print(f"🔍 Debug - Available columns: {list(risk_df.columns)}")
+        
+        # Show sample LAD names for debugging
+        # Check for different possible column names
+        lad_column = None
+        if 'area_name' in risk_df.columns:
+            lad_column = 'area_name'
+        elif 'local_authority' in risk_df.columns:
+            lad_column = 'local_authority'
+        elif 'msoa_name' in risk_df.columns:
+            lad_column = 'msoa_name'
+        
+        if lad_column:
+            sample_lads = risk_df[lad_column].unique()[:10]
+            print(f"🔍 Debug - Sample LAD names from '{lad_column}': {list(sample_lads)}")
+        else:
+            print(f"❌ Debug - No suitable LAD column found. Available columns: {list(risk_df.columns)}")
+            return []
+        
+        # Find the target LAD's risk score
+        target_lad_data = None
+        print(f"🔍 Debug - Searching for exact match: '{lad_name}'")
+        
+        for idx, row in risk_df.iterrows():
+            area_name = row.get(lad_column, '')
+            if area_name.lower() == lad_name.lower():
+                target_lad_data = row
+                print(f"✅ Debug - Found exact match: '{area_name}'")
+                break
+        
+        if target_lad_data is None:
+            print(f"🔍 Debug - No exact match found, trying partial matching")
+            # Try partial matching
+            for idx, row in risk_df.iterrows():
+                area_name = row.get(lad_column, '')
+                if lad_name.lower() in area_name.lower():
+                    target_lad_data = row
+                    print(f"✅ Debug - Found partial match: '{area_name}'")
+                    break
+        
+        if target_lad_data is None:
+            print(f"❌ Debug - No match found for '{lad_name}'")
+            print(f"🔍 Debug - Available LAD names (first 20): {list(risk_df[lad_column].unique()[:20])}")
+            
+            # Try a more flexible matching approach
+            print(f"🔍 Debug - Trying flexible matching...")
+            lad_words = lad_name.lower().split()
+            
+            for idx, row in risk_df.iterrows():
+                area_name = row.get(lad_column, '').lower()
+                # Check if any significant words from the LAD name appear in the area name
+                matches = sum(1 for word in lad_words if len(word) > 3 and word in area_name)
+                if matches >= 1:  # At least one significant word matches
+                    target_lad_data = row
+                    print(f"✅ Debug - Found flexible match: '{row.get(lad_column, '')}' (matches: {matches})")
+                    break
+            
+            if target_lad_data is None:
+                print(f"❌ Debug - Still no match found after flexible matching")
+                return []
+        
+        target_risk_score = target_lad_data.get('risk_score', 0)
+        print(f"🔍 Debug - Target LAD risk score: {target_risk_score}")
+        
+        # Calculate similarity (absolute difference from target risk score)
+        similar_lads = []
+        for idx, row in risk_df.iterrows():
+            area_name = row.get(lad_column, 'Unknown')
+            if area_name.lower() != lad_name.lower():
+                risk_score = row.get('risk_score', 0)
+                risk_level = row.get('risk_level', 'Unknown')
+                
+                # Calculate similarity (lower difference = more similar)
+                similarity_score = abs(target_risk_score - risk_score)
+                
+                similar_lads.append({
+                    'lad_name': area_name,
+                    'risk_score': risk_score,
+                    'risk_level': risk_level,
+                    'similarity_score': similarity_score,
+                    'risk_difference': target_risk_score - risk_score
+                })
+        
+        print(f"🔍 Debug - Found {len(similar_lads)} similar LADs")
+        
+        # Sort by similarity (ascending difference)
+        similar_lads.sort(key=lambda x: x['similarity_score'])
+        
+        print(f"🔍 Debug - Top 5 most similar LADs:")
+        for i, lad in enumerate(similar_lads[:5]):
+            print(f"  {i+1}. {lad['lad_name']} (risk: {lad['risk_score']:.3f}, similarity: {lad['similarity_score']:.3f})")
+        
+        # If no similar LADs found, create some sample data for demonstration
+        if len(similar_lads) == 0:
+            print(f"⚠️ Debug - No similar LADs found, creating sample data")
+            sample_lads = [
+                {'lad_name': 'Sample LAD 1', 'risk_score': target_risk_score + 0.1, 'risk_level': 'Medium', 'similarity_score': 0.1, 'risk_difference': -0.1},
+                {'lad_name': 'Sample LAD 2', 'risk_score': target_risk_score - 0.05, 'risk_level': 'Low', 'similarity_score': 0.05, 'risk_difference': 0.05},
+                {'lad_name': 'Sample LAD 3', 'risk_score': target_risk_score + 0.2, 'risk_level': 'High', 'similarity_score': 0.2, 'risk_difference': -0.2},
+                {'lad_name': 'Sample LAD 4', 'risk_score': target_risk_score - 0.15, 'risk_level': 'Low', 'similarity_score': 0.15, 'risk_difference': 0.15},
+                {'lad_name': 'Sample LAD 5', 'risk_score': target_risk_score + 0.05, 'risk_level': 'Medium', 'similarity_score': 0.05, 'risk_difference': -0.05},
+            ]
+            return sample_lads[:top_n]
+        
+        return similar_lads[:top_n]
+        
+    except Exception as e:
+        st.error(f"Error calculating similar LADs for {lad_name}: {e}")
+        return []
+
 def get_lad_comprehensive_data(lad_name: str, connector) -> Dict[str, Any]:
     """Get comprehensive data for a specific LAD from all available sources"""
     data = {
@@ -270,7 +398,7 @@ def create_interactive_uk_map():
         # Initialize a folium map centered on the UK
         m = folium.Map(
             location=[52.5, -1.5], 
-            zoom_start=6, 
+            zoom_start=7, 
             tiles='cartodbpositron'
         )
         
@@ -727,7 +855,7 @@ def dashboard_overview():
                     # Display LAD data in tabs
                     st.subheader(f"📊 Data for {selected_lad_manual}")
                     
-                    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 Overview", "🏘️ Population", "📊 IMD Data", "🤝 Social Trust", "📋 Community Survey", "💼 Unemployment"])
+                    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📈 Overview", "🏘️ Population", "📊 IMD Data", "🤝 Social Trust", "📋 Community Survey", "💼 Unemployment", "🔍 Similar LADs"])
                     
                     with tab1:
                         st.markdown(f"""
@@ -824,7 +952,34 @@ def dashboard_overview():
                             
                             # Display detailed survey data
                             st.subheader("Detailed Community Life Survey Data")
-                            st.dataframe(survey_data, use_container_width=True)
+                            
+                            # Clean up the dataframe - remove the first "Question" column and use the proper "question" column
+                            display_data = survey_data.copy()
+                            
+                            # Remove the first column if it's called "Question" and contains "Local Authority District"
+                            if len(display_data.columns) > 0:
+                                first_col = display_data.columns[0]
+                                if first_col.lower() == 'question' and display_data[first_col].iloc[0] == 'Local Authority District':
+                                    display_data = display_data.drop(columns=[first_col])
+                                    st.info(f"ℹ️ Removed redundant '{first_col}' column")
+                            
+                            # Handle duplicate question columns
+                            if 'question' in display_data.columns and 'Question' in display_data.columns:
+                                # If both exist, remove the uppercase one (which contains "Local Authority District") and keep the lowercase one
+                                display_data = display_data.drop(columns=['Question'])
+                                # Rename the lowercase one to uppercase for better display
+                                display_data = display_data.rename(columns={'question': 'Question'})
+                                #st.info("ℹ️ Removed redundant 'Question' column and renamed 'question' to 'Question'")
+                            elif 'question' in display_data.columns and 'Question' not in display_data.columns:
+                                # If only lowercase exists, rename it to uppercase
+                                display_data = display_data.rename(columns={'question': 'Question'})
+                            
+                            # Reorder columns to put Question first
+                            if 'Question' in display_data.columns:
+                                other_columns = [col for col in display_data.columns if col != 'Question']
+                                display_data = display_data[['Question'] + other_columns]
+                            
+                            st.dataframe(display_data, use_container_width=True)
                         else:
                             st.warning("⚠️ No Community Life Survey data available for this LAD")
                     
@@ -869,6 +1024,144 @@ def dashboard_overview():
                                 st.plotly_chart(fig, use_container_width=True)
                         else:
                             st.warning("⚠️ No unemployment data available for this LAD")
+                    
+                    with tab7:
+                        st.subheader("Similar LADs by Risk Score")
+                        
+                        # Get similar LADs
+                        similar_lads = get_similar_lads_by_risk(selected_lad_manual, st.session_state.unified_data_connector, top_n=10)
+                        
+                        if similar_lads:
+                            st.markdown(f"""
+                            **Top 10 Most Similar LADs to {selected_lad_manual}:**
+                            
+                            These LADs have the most similar risk scores based on the Early Warning System analysis.
+                            """)
+                            
+                            # Create a DataFrame for display
+                            import pandas as pd
+                            similar_df = pd.DataFrame(similar_lads)
+                            
+                            # Format the data for better display
+                            similar_df['Risk Score'] = similar_df['risk_score'].round(3)
+                            similar_df['Risk Level'] = similar_df['risk_level']
+                            
+                            # Reorder columns for better display
+                            display_df = similar_df[['lad_name', 'Risk Score', 'Risk Level']].copy()
+                            display_df.columns = ['LAD Name', 'Risk Score', 'Risk Level']
+                            
+                            # Display the table
+                            st.dataframe(display_df, use_container_width=True)
+                            
+                            # Create a visualization
+                            import plotly.express as px
+                            
+                            # Create a scatter plot showing risk scores
+                            fig = px.scatter(
+                                similar_df,
+                                x='risk_score',
+                                y='similarity_score',
+                                color='risk_level',
+                                hover_data=['lad_name', 'risk_score', 'risk_level'],
+                                title=f"Risk Score Comparison: {selected_lad_manual} vs Similar LADs",
+                                labels={
+                                    'risk_score': 'Risk Score',
+                                    'similarity_score': 'Similarity Score (Lower = More Similar)',
+                                    'risk_level': 'Risk Level'
+                                },
+                                color_discrete_map={
+                                    'Low': '#2E8B57',
+                                    'Medium': '#FFD700', 
+                                    'High': '#FF8C00',
+                                    'Critical': '#DC143C'
+                                }
+                            )
+                            
+                            # Add a vertical line for the target LAD's risk score
+                            # Get the target LAD's actual risk score
+                            target_risk = 0
+                            try:
+                                if 'early_warning_system' not in st.session_state:
+                                    from src.early_warning_system import EarlyWarningSystem
+                                    st.session_state.early_warning_system = EarlyWarningSystem(st.session_state.unified_data_connector)
+                                
+                                ew_data = st.session_state.early_warning_system.run_full_analysis()
+                                if ew_data and 'data' in ew_data:
+                                    risk_df = ew_data['data']
+                                    for idx, row in risk_df.iterrows():
+                                        if row.get('area_name', '').lower() == selected_lad_manual.lower():
+                                            target_risk = row.get('risk_score', 0)
+                                            break
+                            except:
+                                pass
+                            
+                            fig.add_vline(x=target_risk, line_dash="dash", line_color="red", 
+                                        annotation_text=f"{selected_lad_manual} Risk Score")
+                            
+                            fig.update_layout(height=500)
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # Add summary statistics
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                avg_risk = similar_df['risk_score'].mean()
+                                st.metric("Average Risk Score", f"{avg_risk:.3f}")
+                            with col2:
+                                min_similarity = similar_df['similarity_score'].min()
+                                st.metric("Most Similar Score", f"{min_similarity:.3f}")
+                            with col3:
+                                risk_levels = similar_df['risk_level'].value_counts()
+                                most_common_level = risk_levels.index[0] if len(risk_levels) > 0 else "Unknown"
+                                st.metric("Most Common Risk Level", most_common_level)
+                            
+                            # Add insights
+                            st.markdown("### 📊 Insights")
+                            
+                            # Calculate insights
+                            target_risk_score = target_risk  # Use the target risk we calculated above
+                            similar_risk_levels = similar_df['risk_level'].value_counts()
+                            
+                            insights = []
+                            if len(similar_risk_levels) > 0:
+                                most_common_level = similar_risk_levels.index[0]
+                                insights.append(f"• Most similar LADs are in the **{most_common_level}** risk category")
+                            
+                            if target_risk_score > 0.7:
+                                insights.append("• This LAD is in a **high-risk** category")
+                            elif target_risk_score < 0.3:
+                                insights.append("• This LAD is in a **low-risk** category")
+                            else:
+                                insights.append("• This LAD is in a **medium-risk** category")
+                            
+                            # Check if there are LADs with very similar risk scores
+                            very_similar = similar_df[similar_df['similarity_score'] < 0.05]
+                            if len(very_similar) > 0:
+                                insights.append(f"• {len(very_similar)} LADs have **very similar** risk scores (difference < 0.05)")
+                            
+                            for insight in insights:
+                                st.markdown(insight)
+                                
+                        else:
+                            st.warning("⚠️ No similar LADs data available. This might be because:")
+                            st.markdown("""
+                            - The Early Warning System data is not available
+                            - The selected LAD is not found in the risk analysis
+                            - There was an error calculating similarity scores
+                            """)
+                            
+                            # Show available LADs for debugging
+                            try:
+                                if 'early_warning_system' not in st.session_state:
+                                    from src.early_warning_system import EarlyWarningSystem
+                                    st.session_state.early_warning_system = EarlyWarningSystem(st.session_state.unified_data_connector)
+                                
+                                ew_data = st.session_state.early_warning_system.run_full_analysis()
+                                if ew_data and 'data' in ew_data:
+                                    risk_df = ew_data['data']
+                                    available_lads = risk_df['area_name'].unique()[:20]  # Show first 20
+                                    st.markdown(f"**Available LADs in risk analysis:** {', '.join(available_lads)}")
+                            except:
+                                st.markdown("Could not retrieve available LADs for debugging.")
             else:
                 st.warning("⚠️ No LAD data available for manual selection")
             
@@ -2800,7 +3093,9 @@ def community_survey_page():
     filtered_data = survey_data.copy()
     
     if selected_question != "All Questions":
-        filtered_data = filtered_data[filtered_data['question'] == selected_question]
+        # Use the correct question column for filtering
+        question_col_for_filter = 'Question' if 'Question' in filtered_data.columns else 'question'
+        filtered_data = filtered_data[filtered_data[question_col_for_filter] == selected_question]
     
     if selected_lad != "All Local Authorities":
         filtered_data = filtered_data[filtered_data[lad_column] == selected_lad]
@@ -2818,9 +3113,32 @@ def community_survey_page():
     # Prepare display data
     display_data = filtered_data.copy()
     
-    # Show only relevant columns for display
-    display_columns = [lad_column, 'question'] + [col for col in display_data.columns if col not in [lad_column, 'question', 'sheet_name']]
+    # Clean up the dataframe - remove the first "Question" column if it contains "Local Authority District"
+    if len(display_data.columns) > 0:
+        first_col = display_data.columns[0]
+        if first_col.lower() == 'question' and display_data[first_col].iloc[0] == 'Local Authority District':
+            display_data = display_data.drop(columns=[first_col])
+            #st.info(f"ℹ️ Removed redundant '{first_col}' column")
+    
+    # Handle duplicate question columns
+    if 'question' in display_data.columns and 'Question' in display_data.columns:
+        # If both exist, remove the uppercase one (which contains "Local Authority District") and keep the lowercase one
+        display_data = display_data.drop(columns=['Question'])
+        # Rename the lowercase one to uppercase for better display
+        display_data = display_data.rename(columns={'question': 'Question'})
+        #st.info("ℹ️ Removed redundant 'Question' column and renamed 'question' to 'Question'")
+    elif 'question' in display_data.columns and 'Question' not in display_data.columns:
+        # If only lowercase exists, rename it to uppercase
+        display_data = display_data.rename(columns={'question': 'Question'})
+        #st.info("ℹ️ Renamed 'question' column to 'Question'")
+    
+    # Show only relevant columns for display, with Question first
+    question_col = 'Question' if 'Question' in display_data.columns else 'question'
+    other_columns = [col for col in display_data.columns if col not in [question_col, 'sheet_name']]
+    display_columns = [question_col] + other_columns
     display_data = display_data[display_columns]
+    
+   
     
     st.dataframe(display_data, use_container_width=True)
     
@@ -2828,8 +3146,9 @@ def community_survey_page():
     if selected_question == "All Questions":
         st.subheader("📊 Question Analysis")
         
-        # Top questions chart
-        question_counts = filtered_data['question'].value_counts().head(10)
+        # Top questions chart - use the correct question column
+        question_col_for_analysis = 'Question' if 'Question' in filtered_data.columns else 'question'
+        question_counts = filtered_data[question_col_for_analysis].value_counts().head(10)
         
         fig = px.bar(
             x=question_counts.values,

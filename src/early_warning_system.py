@@ -208,7 +208,38 @@ class EarlyWarningSystem:
         combined['negative_sentiment_ratio'] = np.minimum(1, combined['negative_sentiment_ratio'])
         
         # Add local authority information (extract from MSOA name or use default)
-        combined['local_authority'] = combined['msoa_name'].str.extract(r'(\w+)')[0].fillna('Unknown')
+        # Try to extract more meaningful LAD names from MSOA names
+        def extract_lad_name(msoa_name):
+            if pd.isna(msoa_name):
+                return 'Unknown'
+            
+            # Common patterns in MSOA names
+            msoa_str = str(msoa_name)
+            
+            # Remove common suffixes like "001", "002", etc.
+            msoa_str = msoa_str.replace(' 001', '').replace(' 002', '').replace(' 003', '')
+            msoa_str = msoa_str.replace(' 01', '').replace(' 02', '').replace(' 03', '')
+            
+            # Try to extract meaningful parts (not just first word)
+            # Look for common LAD patterns
+            if ' and ' in msoa_str:
+                # For names like "Kensington and Chelsea", take up to "and Chelsea"
+                parts = msoa_str.split(' and ')
+                if len(parts) >= 2:
+                    return f"{parts[0]} and {parts[1].split()[0]}"
+            
+            # For other cases, take first two words if they seem meaningful
+            words = msoa_str.split()
+            if len(words) >= 2:
+                # Check if second word is not a number
+                if not words[1].isdigit():
+                    return f"{words[0]} {words[1]}"
+                else:
+                    return words[0]
+            else:
+                return words[0] if words else 'Unknown'
+        
+        combined['local_authority'] = combined['msoa_name'].apply(extract_lad_name)
         
         return combined
     
