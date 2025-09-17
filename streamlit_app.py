@@ -1112,32 +1112,6 @@ def dashboard_overview():
                 delta="Data not available"
             )
     
-    # Data Source Status
-    st.subheader("Data Source Status")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        **Available Data Sources:**
-        - Good Neighbours Survey Data
-        - Index of Multiple Deprivation (IMD)
-        - Population Demographics (Census 2022)
-        - Community Life Survey 2023-24
-        - Local News Coverage Data
-        - Early Warning System Indicators
-        """)
-    
-    with col2:
-        st.markdown("""
-        **Analysis Capabilities:**
-        - Social Trust Analysis
-        - Risk Assessment Mapping
-        - Demographic Insights
-        - Community Survey Analysis
-        - Early Warning Indicators
-        """)
-    
     # Quick Actions
     st.subheader("Quick Actions")
     
@@ -1705,6 +1679,32 @@ def dashboard_overview():
             st.error("Failed to create interactive map. Please check the data files.")
     else:
         st.warning("Interactive mapping requires Folium and GeoPandas. Please install: pip install folium geopandas streamlit-folium")
+    
+    # Data Source Status (moved to bottom of page)
+    st.subheader("Data Source Status")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        **Available Data Sources:**
+        - Good Neighbours Survey Data
+        - Index of Multiple Deprivation (IMD)
+        - Population Demographics (Census 2022)
+        - Community Life Survey 2023-24
+        - Local News Coverage Data
+        - Early Warning System Indicators
+        """)
+    
+    with col2:
+        st.markdown("""
+        **Analysis Capabilities:**
+        - Social Trust Analysis
+        - Risk Assessment Mapping
+        - Demographic Insights
+        - Community Survey Analysis
+        - Early Warning Indicators
+        """)
 
 def early_warning_page():
     """Early warning system page"""
