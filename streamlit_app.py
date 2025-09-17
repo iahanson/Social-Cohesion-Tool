@@ -958,26 +958,26 @@ def main():
     """Main application function"""
     
     # Header
-    st.markdown('<h1 class="main-header">🏘️ Social Cohesion Monitoring System</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Social Cohesion Monitoring System</h1>', unsafe_allow_html=True)
     
     # Sidebar navigation
     st.sidebar.title("Navigation")
     
     # Initialize page in session state if not exists
     if 'current_page' not in st.session_state:
-        st.session_state.current_page = "📊 Dashboard Overview"
+        st.session_state.current_page = "Dashboard Overview"
     
     page_options = [
-            "📊 Dashboard Overview",
-            "🚨 Early Warning System",
-            "🗺️ Sentiment & Trust Mapping",
-        "🤝 Good Neighbours Trust Data",
-        "📋 Community Life Survey",
-            "💡 Intervention Recommendations",
-            "🎯 Engagement Simulator",
-            "📧 Alert Management",
-        "🤖 GenAI Text Analysis",
-            "⚙️ System Settings"
+            "Dashboard Overview",
+            "Early Warning System",
+            "Sentiment & Trust Mapping",
+        "Good Neighbours Trust Data",
+        "Community Life Survey",
+            "Intervention Recommendations",
+            "Engagement Simulator",
+            "Alert Management",
+        "GenAI Text Analysis",
+            "System Settings"
         ]
     
     try:
@@ -1000,30 +1000,30 @@ def main():
     st.session_state.current_page = page
     
     # Route to appropriate page
-    if page == "📊 Dashboard Overview":
+    if page == "Dashboard Overview":
         dashboard_overview()
-    elif page == "🚨 Early Warning System":
+    elif page == "Early Warning System":
         early_warning_page()
-    elif page == "🗺️ Sentiment & Trust Mapping":
+    elif page == "Sentiment & Trust Mapping":
         sentiment_mapping_page()
-    elif page == "🤝 Good Neighbours Trust Data":
+    elif page == "Good Neighbours Trust Data":
         good_neighbours_page()
-    elif page == "📋 Community Life Survey":
+    elif page == "Community Life Survey":
         community_survey_page()
-    elif page == "💡 Intervention Recommendations":
+    elif page == "Intervention Recommendations":
         intervention_page()
-    elif page == "🎯 Engagement Simulator":
+    elif page == "Engagement Simulator":
         engagement_simulator_page()
-    elif page == "📧 Alert Management":
+    elif page == "Alert Management":
         alert_management_page()
-    elif page == "🤖 GenAI Text Analysis":
+    elif page == "GenAI Text Analysis":
         genai_text_analysis_page()
-    elif page == "⚙️ System Settings":
+    elif page == "System Settings":
         settings_page()
 
 def dashboard_overview():
     """Dashboard overview page"""
-    st.header("📊 System Overview")
+    st.header("System Overview")
     
     # Generate sample data for overview
     with st.spinner("Loading system data..."):
@@ -1113,13 +1113,13 @@ def dashboard_overview():
             )
     
     # Data Source Status
-    st.subheader("📋 Data Source Status")
+    st.subheader("Data Source Status")
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("""
-        **✅ Available Data Sources:**
+        **Available Data Sources:**
         - Good Neighbours Survey Data
         - Index of Multiple Deprivation (IMD)
         - Population Demographics (Census 2022)
@@ -1130,7 +1130,7 @@ def dashboard_overview():
     
     with col2:
         st.markdown("""
-        **📊 Analysis Capabilities:**
+        **Analysis Capabilities:**
         - Social Trust Analysis
         - Risk Assessment Mapping
         - Demographic Insights
@@ -1139,27 +1139,27 @@ def dashboard_overview():
         """)
     
     # Quick Actions
-    st.subheader("🚀 Quick Actions")
+    st.subheader("Quick Actions")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("📊 View Social Trust Analysis", use_container_width=True):
+        if st.button("View Social Trust Analysis", use_container_width=True):
             st.session_state.page = "Social Trust Analysis"
             st.rerun()
     
     with col2:
-        if st.button("📋 Explore Community Survey", use_container_width=True):
+        if st.button("Explore Community Survey", use_container_width=True):
             st.session_state.page = "Community Life Survey"
             st.rerun()
     
     with col3:
-        if st.button("🚨 Early Warning System", use_container_width=True):
+        if st.button("Early Warning System", use_container_width=True):
             st.session_state.page = "Early Warning System"
             st.rerun()
     
     # Interactive Maps Section
-    st.subheader("🗺️ UK Data Visualization")
+    st.subheader("UK Data Visualization")
     
     if FOLIUM_AVAILABLE and GEOPANDAS_AVAILABLE:
         # Create two columns for side-by-side maps
@@ -1185,7 +1185,7 @@ def dashboard_overview():
                             st.rerun()
         
         with map_col2:
-            st.markdown("### 📰 Local News Coverage Map")
+            st.markdown("### Local News Coverage Map")
             with st.spinner("Loading local news map..."):
                 news_map = create_local_news_map()
                 
@@ -1201,18 +1201,18 @@ def dashboard_overview():
         
         with legend_col1:
             st.markdown("""
-            **🚨 Risk Assessment Map Legend:**
-            - 🟢 **Low Risk** (0.0 - 0.3)
-            - 🟡 **Medium Risk** (0.3 - 0.6) 
-            - 🟠 **High Risk** (0.6 - 0.8)
-            - 🔴 **Critical Risk** (0.8 - 1.0)
+            **Risk Assessment Map Legend:**
+            - **Low Risk** (0.0 - 0.3)
+            - **Medium Risk** (0.3 - 0.6) 
+            - **High Risk** (0.6 - 0.8)
+            - **Critical Risk** (0.8 - 1.0)
             """)
         
         with legend_col2:
             st.markdown("""
-            **📰 Local News Coverage Map Legend:**
-            - 🟠 **Orange Dots** - Originating Locations (where news comes from)
-            - 🟣 **Purple Dots** - Referenced Places (locations mentioned in articles)
+            **Local News Coverage Map Legend:**
+            - **Orange Dots** - Originating Locations (where news comes from)
+            - **Purple Dots** - Referenced Places (locations mentioned in articles)
             """)
         
         # Use the risk assessment map for LAD selection (keep existing functionality)
@@ -1241,10 +1241,10 @@ def dashboard_overview():
             # If a LAD was clicked on the map, store it in session state
             if selected_lad_from_map:
                 st.session_state.selected_lad_from_map = selected_lad_from_map
-                st.success(f"📍 Map Selection: {selected_lad_from_map}")
+                st.success(f"Map Selection: {selected_lad_from_map}")
             
             # LAD Selection
-            st.subheader("🔍 Select a Local Authority District")
+            st.subheader("Select a Local Authority District")
             st.write("**Click on any LAD boundary on the map above, or choose from the dropdown below:**")
             
             # Get list of available LADs from the data
@@ -1269,16 +1269,16 @@ def dashboard_overview():
                 
                 if selected_lad_manual:
                     st.session_state.selected_lad = selected_lad_manual
-                    st.success(f"📍 Selected: {selected_lad_manual}")
+                    st.success(f"Selected: {selected_lad_manual}")
                     
                     # Get comprehensive data for the selected LAD
                     with st.spinner(f"Loading data for {selected_lad_manual}..."):
                         lad_data = get_lad_comprehensive_data(selected_lad_manual, st.session_state.unified_data_connector)
                     
                     # Display LAD data in tabs
-                    st.subheader(f"📊 Data for {selected_lad_manual}")
+                    st.subheader(f"Data for {selected_lad_manual}")
                     
-                    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📈 Overview", "🏘️ Population", "📊 IMD Data", "🤝 Social Trust", "📋 Community Survey", "💼 Unemployment", "📰 Local News", "🔍 Similar LADs"])
+                    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["Overview", "Population", "IMD Data", "Social Trust", "Community Survey", "Unemployment", "Local News", "Similar LADs"])
                     
                     with tab1:
                         st.markdown(f"""
@@ -1289,9 +1289,9 @@ def dashboard_overview():
                         """)
                         
                         if lad_data['msoa_count'] == 0:
-                            st.warning("⚠️ No MSOA-level data available for this LAD")
+                            st.warning("No MSOA-level data available for this LAD")
                         else:
-                            st.success(f"✅ Data available for {lad_data['msoa_count']} MSOAs")
+                            st.success(f"Data available for {lad_data['msoa_count']} MSOAs")
                     
                     with tab2:
                         if lad_data['population_data'] is not None:
@@ -1313,7 +1313,7 @@ def dashboard_overview():
                             st.subheader("Detailed Population Data by MSOA")
                             st.dataframe(pop_data, use_container_width=True)
                         else:
-                            st.warning("⚠️ No population data available for this LAD")
+                            st.warning("No population data available for this LAD")
                     
                     with tab3:
                         if lad_data['imd_data'] is not None:
@@ -1336,7 +1336,7 @@ def dashboard_overview():
                             st.subheader("Detailed IMD Data by MSOA")
                             st.dataframe(imd_data, use_container_width=True)
                         else:
-                            st.warning("⚠️ No IMD data available for this LAD")
+                            st.warning("No IMD data available for this LAD")
                     
                     with tab4:
                         if lad_data['good_neighbours_data'] is not None:
@@ -1359,7 +1359,7 @@ def dashboard_overview():
                             st.subheader("Detailed Social Trust Data by MSOA")
                             st.dataframe(gn_data, use_container_width=True)
                         else:
-                            st.warning("⚠️ No Good Neighbours social trust data available for this LAD")
+                            st.warning("No Good Neighbours social trust data available for this LAD")
                     
                     with tab5:
                         if lad_data['community_survey_data'] is not None:
@@ -1384,7 +1384,7 @@ def dashboard_overview():
                                 first_col = display_data.columns[0]
                                 if first_col.lower() == 'question' and display_data[first_col].iloc[0] == 'Local Authority District':
                                     display_data = display_data.drop(columns=[first_col])
-                                    st.info(f"ℹ️ Removed redundant '{first_col}' column")
+                                    st.info(f"Removed redundant '{first_col}' column")
                             
                             # Handle duplicate question columns
                             if 'question' in display_data.columns and 'Question' in display_data.columns:
@@ -1404,7 +1404,7 @@ def dashboard_overview():
                             
                             st.dataframe(display_data, use_container_width=True)
                         else:
-                            st.warning("⚠️ No Community Life Survey data available for this LAD")
+                            st.warning("No Community Life Survey data available for this LAD")
                     
                     with tab6:
                         if lad_data['unemployment_data'] is not None:
@@ -1446,7 +1446,7 @@ def dashboard_overview():
                                 fig.update_layout(height=400)
                                 st.plotly_chart(fig, use_container_width=True)
                         else:
-                            st.warning("⚠️ No unemployment data available for this LAD")
+                            st.warning("No unemployment data available for this LAD")
                     
                     with tab7:
                         if lad_data['local_news_data'] is not None:
@@ -1496,7 +1496,7 @@ def dashboard_overview():
                             st.dataframe(display_news, use_container_width=True)
                             
                             # Social Cohesion Analysis
-                            st.subheader("🔍 Social Cohesion Analysis")
+                            st.subheader("Social Cohesion Analysis")
                             
                             # Analyze each article for social cohesion relevance
                             with st.spinner("Analyzing articles for social cohesion themes..."):
@@ -1504,7 +1504,7 @@ def dashboard_overview():
                             
                             if cohesion_analysis:
                                 # Display analysis summary
-                                st.markdown("**📊 Analysis Summary:**")
+                                st.markdown("**Analysis Summary:**")
                                 col1, col2, col3, col4 = st.columns(4)
                                 
                                 with col1:
@@ -1517,7 +1517,7 @@ def dashboard_overview():
                                     st.metric("Neutral Sentiment", cohesion_analysis['neutral_count'])
                                 
                                 # Display detailed analysis table
-                                st.markdown("**📋 Article-by-Article Analysis:**")
+                                st.markdown("**Article-by-Article Analysis:**")
                                 
                                 # Create analysis dataframe
                                 analysis_df = pd.DataFrame(cohesion_analysis['article_analysis'])
@@ -1537,12 +1537,12 @@ def dashboard_overview():
                                 
                                 # Display key themes
                                 if cohesion_analysis['key_themes']:
-                                    st.markdown("**🎯 Key Social Cohesion Themes:**")
+                                    st.markdown("**Key Social Cohesion Themes:**")
                                     for theme, count in cohesion_analysis['key_themes'].items():
                                         st.write(f"• **{theme}**: {count} articles")
                             
                             # Keywords analysis (existing)
-                            st.subheader("📰 General News Analysis")
+                            st.subheader("General News Analysis")
                             keywords_analysis = st.session_state.unified_data_connector.get_local_news_keywords_analysis()
                             if keywords_analysis and 'cohesion_keywords' in keywords_analysis:
                                 st.markdown("**Social Cohesion Keywords Found:**")
@@ -1550,7 +1550,7 @@ def dashboard_overview():
                                     st.write(f"• **{keyword}**: {count} mentions")
                             
                         else:
-                            st.warning("⚠️ No local news data available for this LAD")
+                            st.warning("No local news data available for this LAD")
                     
                     with tab8:
                         st.subheader("Similar LADs by Risk Score")
@@ -1668,7 +1668,7 @@ def dashboard_overview():
                                 st.markdown(insight)
                                 
                         else:
-                            st.warning("⚠️ No similar LADs data available. This might be because:")
+                            st.warning("No similar LADs data available. This might be because:")
                             st.markdown("""
                             - The Early Warning System data is not available
                             - The selected LAD is not found in the risk analysis
@@ -1689,7 +1689,7 @@ def dashboard_overview():
                             except:
                                 st.markdown("Could not retrieve available LADs for debugging.")
             else:
-                st.warning("⚠️ No LAD data available for manual selection")
+                st.warning("No LAD data available for manual selection")
             
             # Map information
             st.info("""
@@ -1715,7 +1715,7 @@ def early_warning_page():
         ew_data = st.session_state.early_warning_system.run_full_analysis()
     
     # Key metrics
-    st.subheader("📊 System Overview")
+    st.subheader("System Overview")
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -1749,7 +1749,7 @@ def early_warning_page():
         )
     
     # Risk level distribution
-    st.subheader("📈 Risk Level Distribution")
+    st.subheader("Risk Level Distribution")
     
     risk_dist = ew_data['data']['risk_level'].value_counts()
     
@@ -1821,15 +1821,15 @@ def early_warning_page():
             mime="text/csv"
         )
     else:
-        st.info("✅ No high-risk areas detected")
+        st.info("No high-risk areas detected")
     
     # Anomaly detection results
-    st.subheader("🔍 Anomaly Detection")
+    st.subheader("Anomaly Detection")
     
     anomalous_data = ew_data['data'][ew_data['data']['is_anomaly'] == True]
     
     if not anomalous_data.empty:
-        st.warning(f"⚠️ {len(anomalous_data)} anomalous areas detected")
+        st.warning(f"{len(anomalous_data)} anomalous areas detected")
         
         # Anomaly scatter plot
         fig_scatter = px.scatter(
@@ -1849,7 +1849,7 @@ def early_warning_page():
         st.plotly_chart(fig_scatter, use_container_width=True)
         
         # Anomalous areas table
-        st.subheader("📋 Anomalous Areas Details")
+        st.subheader("Anomalous Areas Details")
         anomaly_cols = ['msoa_code', 'msoa_name', 'risk_score', 'anomaly_score', 'risk_level']
         available_anomaly_cols = [col for col in anomaly_cols if col in anomalous_data.columns]
         
@@ -1858,10 +1858,10 @@ def early_warning_page():
             use_container_width=True
         )
     else:
-        st.success("✅ No anomalous areas detected")
+        st.success("No anomalous areas detected")
     
     # Risk factors analysis
-    st.subheader("📊 Risk Factors Analysis")
+    st.subheader("Risk Factors Analysis")
     
     # Get risk distribution from summary
     risk_distribution = ew_data['summary'].get('risk_distribution', {})
@@ -1882,7 +1882,7 @@ def early_warning_page():
             st.write(f"• Total Alerts Generated: {ew_data['summary']['total_alerts']}")
     
     # Recommendations
-    st.subheader("💡 Recommendations")
+    st.subheader("Recommendations")
     
     # Generate recommendations based on the data
     recommendations = []
@@ -1920,7 +1920,7 @@ def early_warning_page():
         st.metric("SMS Alerts", "Configured" if st.session_state.alert_system.twilio_account_sid else "Not Configured")
     
     # System settings
-    with st.expander("⚙️ System Settings"):
+    with st.expander("System Settings"):
         st.markdown("**Risk Thresholds:**")
         st.write(f"• Critical Risk: {st.session_state.early_warning_system.risk_threshold}")
         st.write(f"• Anomaly Detection: {st.session_state.early_warning_system.anomaly_detector.contamination}")
@@ -1935,7 +1935,7 @@ def early_warning_page():
             st.rerun()
 
 def sentiment_mapping_page():
-    st.header("🗺️ Sentiment & Trust Mapping")
+    st.header("Sentiment & Trust Mapping")
     st.info("Sentiment Mapping page - to be implemented")
 
 def good_neighbours_page():
@@ -1947,7 +1947,7 @@ def community_survey_page():
     st.info("Community Survey page - to be implemented")
 
 def intervention_page():
-    st.header("💡 Intervention Recommendations")
+    st.header("Intervention Recommendations")
     st.info("Intervention page - to be implemented")
 
 def engagement_simulator_page():
@@ -1963,7 +1963,7 @@ def genai_text_analysis_page():
     st.info("GenAI Text Analysis page - to be implemented")
 
 def settings_page():
-    st.header("⚙️ System Settings")
+    st.header("System Settings")
     st.info("Settings page - to be implemented")
 
     # with col2:
@@ -2130,7 +2130,7 @@ def settings_page():
 
 def sentiment_mapping_page():
     """Sentiment mapping page"""
-    st.header("🗺️ Sentiment & Trust Mapping")
+    st.header("Sentiment & Trust Mapping")
     
     # Controls
     col1, col2 = st.columns(2)
@@ -2428,7 +2428,7 @@ def good_neighbours_page():
                     summary = connector.get_good_neighbours_summary()
                     
                     if df is not None and summary is not None:
-                        st.subheader("📊 Data Overview")
+                        st.subheader("Data Overview")
                         
                         # Key metrics
                         col1, col2, col3, col4 = st.columns(4)
@@ -2490,11 +2490,11 @@ def good_neighbours_page():
                     
                     # Trust interpretation
                     if trust_data['net_trust'] > 0:
-                        st.success(f"✅ Positive net trust score indicates higher trust than caution")
+                        st.success(f"Positive net trust score indicates higher trust than caution")
                     elif trust_data['net_trust'] < 0:
-                        st.warning(f"⚠️ Negative net trust score indicates higher caution than trust")
+                        st.warning(f"Negative net trust score indicates higher caution than trust")
                     else:
-                        st.info(f"ℹ️ Neutral net trust score indicates balanced trust and caution")
+                        st.info(f"Neutral net trust score indicates balanced trust and caution")
                         
                 else:
                     st.error(f"No social trust data found for MSOA {msoa_code}")
@@ -2612,7 +2612,7 @@ def good_neighbours_page():
 
 def intervention_page():
     """Intervention recommendations page"""
-    st.header("💡 Intervention Recommendations")
+    st.header("Intervention Recommendations")
     
     # Area input
     st.subheader("Target Area Characteristics")
@@ -2920,7 +2920,7 @@ def alert_management_page():
 
 def settings_page():
     """System settings page"""
-    st.header("⚙️ System Settings")
+    st.header("System Settings")
     
     # Data source configuration
     st.subheader("Data Source Configuration")
@@ -2999,7 +2999,7 @@ def genai_text_analysis_page():
         return
     
     # Create tabs for different analysis modes
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Single Text Analysis", "📁 Batch Analysis", "🗺️ Locality Mapping", "🔍 Embedding & Similarity", "📊 Analysis Results"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Single Text Analysis", "Batch Analysis", "Locality Mapping", "Embedding & Similarity", "Analysis Results"])
     
     with tab1:
         st.subheader("Single Text Analysis")
@@ -3112,7 +3112,7 @@ def genai_text_analysis_page():
                         
                         # Localities found
                         if result.localities_found:
-                            st.subheader("🗺️ Localities Identified")
+                            st.subheader("Localities Identified")
                             localities_data = []
                             for locality in result.localities_found:
                                 localities_data.append({
@@ -3127,7 +3127,7 @@ def genai_text_analysis_page():
                         
                         # Recommendations
                         if result.recommendations:
-                            st.subheader("💡 Recommendations")
+                            st.subheader("Recommendations")
                             for i, rec in enumerate(result.recommendations, 1):
                                 st.write(f"{i}. {rec}")
                         
@@ -3257,11 +3257,11 @@ def genai_text_analysis_page():
             placeholder="e.g., Kensington, SW1A 1AA, Hyde Park"
         )
         
-        if st.button("🗺️ Map Locality"):
+        if st.button("Map Locality"):
             if locality_input:
                 result = mapper.map_locality(locality_input)
                 if result:
-                    st.success("✅ Locality mapped successfully!")
+                    st.success("Locality mapped successfully!")
                     
                     col1, col2 = st.columns(2)
                     with col1:
@@ -3558,7 +3558,7 @@ def genai_text_analysis_page():
 
 def community_survey_page():
     """Community Life Survey data analysis page"""
-    st.title("📋 Community Life Survey Analysis")
+    st.title("Community Life Survey Analysis")
     st.markdown("Analyze community engagement and social cohesion data from the Community Life Survey")
     
     # Get data connector
@@ -3574,7 +3574,7 @@ def community_survey_page():
     summary = connector.get_community_survey_summary()
     
     # Display summary metrics
-    st.subheader("📊 Survey Overview")
+    st.subheader("Survey Overview")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -3628,14 +3628,14 @@ def community_survey_page():
         filtered_data = filtered_data[filtered_data[lad_column] == selected_lad]
     
     # Display filtered results
-    st.subheader("📈 Analysis Results")
+    st.subheader("Analysis Results")
     
     if filtered_data.empty:
         st.warning("No data matches the selected filters.")
         return
     
     # Show data table
-    st.subheader("📋 Survey Data")
+    st.subheader("Survey Data")
     
     # Prepare display data
     display_data = filtered_data.copy()
@@ -3671,7 +3671,7 @@ def community_survey_page():
     
     # Question analysis
     if selected_question == "All Questions":
-        st.subheader("📊 Question Analysis")
+        st.subheader("Question Analysis")
         
         # Top questions chart - use the correct question column
         question_col_for_analysis = 'Question' if 'Question' in filtered_data.columns else 'question'
@@ -3689,7 +3689,7 @@ def community_survey_page():
     
     # LAD analysis
     if selected_lad == "All Local Authorities":
-        st.subheader("🏛️ Local Authority Analysis")
+        st.subheader("Local Authority Analysis")
         
         # Top LADs by response count
         lad_counts = filtered_data[lad_column].value_counts().head(10)
@@ -3706,7 +3706,7 @@ def community_survey_page():
     
     # Detailed analysis for specific selections
     if selected_question != "All Questions" and selected_lad != "All Local Authorities":
-        st.subheader("🔍 Detailed Analysis")
+        st.subheader("Detailed Analysis")
         
         # Get specific data
         specific_data = connector.get_lad_survey_data(selected_lad)
